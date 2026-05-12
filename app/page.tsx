@@ -1,65 +1,110 @@
-import Image from "next/image";
+import Link from "next/link"
+import { workflows, agents } from "@/lib/agents"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { ArrowRight, Bot, Layers } from "lucide-react"
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+    <main className="min-h-screen bg-gray-50 text-gray-900">
+      {/* Sandbox Banner */}
+      <div className="bg-purple-700 text-white text-center py-2 px-4 text-sm font-medium tracking-wide">
+        ⚠️ SANDBOX ENVIRONMENT — For testing purposes only
+      </div>
+
+      {/* Header */}
+      <div className="border-b border-gray-200 bg-white shadow-sm">
+        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center gap-3">
+          <div className="w-8 h-8 rounded-lg bg-purple-700 flex items-center justify-center">
+            <Bot className="w-4 h-4 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-gray-900">Agent Dashboard</h1>
+            <p className="text-xs text-gray-500">Your central hub for AI agents</p>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+      </div>
+
+      <div className="max-w-5xl mx-auto px-6 py-10 space-y-12">
+
+        {/* Workflows */}
+        <section>
+          <div className="flex items-center gap-2 mb-5">
+            <Layers className="w-4 h-4 text-purple-600" />
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">Workflows</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {workflows.map((wf) => (
+              <Card key={wf.id} className="bg-white border-gray-200 hover:border-purple-400 hover:shadow-md transition-all">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-base text-gray-900">{wf.name}</CardTitle>
+                    <Badge className={wf.status === "active" ? "bg-green-100 text-green-700 border border-green-300" : "bg-gray-100 text-gray-500"}>
+                      {wf.status === "active" ? "Active" : "Coming Soon"}
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-gray-500 text-sm">{wf.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center gap-2 mb-4 flex-wrap">
+                    {wf.steps.map((step, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 border border-gray-200">{step.label}</span>
+                        {i < wf.steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400" />}
+                      </div>
+                    ))}
+                  </div>
+                  {wf.status === "active" ? (
+                    <Link href={`/workflow/${wf.id}`}>
+                      <Button className="w-full bg-purple-700 hover:bg-purple-800 text-white cursor-pointer">
+                        Start Workflow <ArrowRight className="w-4 h-4 ml-2" />
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Button disabled className="w-full" variant="secondary">Coming Soon</Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+        {/* Individual Agents */}
+        <section>
+          <div className="flex items-center gap-2 mb-5">
+            <Bot className="w-4 h-4 text-purple-600" />
+            <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">Individual Agents</h2>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {agents.map((agent) => (
+              <Card key={agent.id} className="bg-white border-gray-200 hover:border-purple-400 hover:shadow-md transition-all">
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-sm text-gray-900">{agent.name}</CardTitle>
+                    <Badge className={agent.status === "active" ? "bg-green-100 text-green-700 border border-green-300 text-xs" : "bg-gray-100 text-gray-500 text-xs"}>
+                      {agent.status === "active" ? "Active" : "Coming Soon"}
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-gray-500 text-xs">{agent.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {agent.status === "active" ? (
+                    <a href={agent.url} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" className="w-full border-gray-300 text-gray-700 hover:bg-purple-50 hover:border-purple-400 text-sm cursor-pointer">
+                        Open Agent <ArrowRight className="w-3 h-3 ml-2" />
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button disabled className="w-full text-sm" variant="secondary">Coming Soon</Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </section>
+
+      </div>
+    </main>
+  )
 }

@@ -1,0 +1,76 @@
+// ─────────────────────────────────────────────────────────────
+// AGENT CONFIGURATION
+// To add a new agent to the dashboard, add a new entry below.
+// ─────────────────────────────────────────────────────────────
+
+export type Agent = {
+  id: string
+  name: string
+  description: string
+  url: string
+  status: "active" | "coming-soon"
+}
+
+export type Workflow = {
+  id: string
+  name: string
+  description: string
+  steps: WorkflowStep[]
+  status: "active" | "coming-soon"
+}
+
+export type WorkflowStep = {
+  agentId: string
+  label: string
+  requiresConfirmation: boolean
+  confirmationPrompt?: string
+}
+
+// ─────────────────────────────────────────────────────────────
+// AGENTS — add new agents here
+// ─────────────────────────────────────────────────────────────
+export const agents: Agent[] = [
+  {
+    id: "contract-finder",
+    name: "Contract Finder",
+    description: "Search by opportunity name to find the most likely contract document.",
+    url: "https://contract-finder-one.vercel.app/",
+    status: "active",
+  },
+  {
+    id: "opp-prep-ai",
+    name: "Opp Prep AI",
+    description: "Prepare your opportunity with AI-powered insights and analysis.",
+    url: "https://sandbox-opp-prep.vercel.app/",
+    status: "active",
+  },
+]
+
+// ─────────────────────────────────────────────────────────────
+// WORKFLOWS — add new workflows here
+// ─────────────────────────────────────────────────────────────
+export const workflows: Workflow[] = [
+  {
+    id: "contract-to-opp",
+    name: "Contract → Opp Prep",
+    description: "Find the correct contract, confirm it, then launch Opp Prep AI.",
+    status: "active",
+    steps: [
+      {
+        agentId: "contract-finder",
+        label: "Step 1: Find Contract",
+        requiresConfirmation: true,
+        confirmationPrompt: "Did Contract Finder find the correct contract?",
+      },
+      {
+        agentId: "opp-prep-ai",
+        label: "Step 2: Opp Prep AI",
+        requiresConfirmation: false,
+      },
+    ],
+  },
+]
+
+export function getAgent(id: string): Agent | undefined {
+  return agents.find((a) => a.id === id)
+}
