@@ -44,6 +44,13 @@ export const agents: Agent[] = [
     url: "https://sandbox-opp-prep.vercel.app/",
     status: "active",
   },
+  {
+    id: "finalizing-closer",
+    name: "Finalizing-Closer Agent",
+    description: "Autonomously resolves opportunities stuck in the Finalizing stage in Salesforce. Completes blocking tasks, flags high-value items, and logs everything to a live monitoring dashboard.",
+    url: "https://trilogy-core-renewals-sales-ops.vercel.app/",
+    status: "active",
+  },
 ]
 
 // ─────────────────────────────────────────────────────────────
