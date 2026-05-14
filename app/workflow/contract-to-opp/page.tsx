@@ -258,6 +258,14 @@ export default function ContractToOppWorkflow() {
 
             <Separator className="bg-gray-100" />
 
+            <Button
+              onClick={() => { setStep("opp-input"); setOppName(""); setContractUrl(""); setContractTitle("") }}
+              variant="outline"
+              className="w-full border-purple-300 text-purple-700 hover:bg-purple-50 cursor-pointer"
+            >
+              Run Another Opportunity
+            </Button>
+
             <Link href="/">
               <Button variant="ghost" className="w-full text-gray-400 hover:text-gray-700 cursor-pointer">
                 <ArrowLeft className="w-3 h-3 mr-2" /> Back to Dashboard
