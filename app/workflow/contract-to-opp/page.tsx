@@ -325,7 +325,7 @@ export default function ContractToOppWorkflow() {
               <div>
                 <p className="text-sm font-semibold text-gray-800">Generate Contract Report</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Download the documents below, then upload them to the Contract Report Generator Gem to produce a full PDF report.
+                  Open each document in Salesforce to download it, then upload to the Contract Report Generator Gem.
                 </p>
               </div>
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
@@ -377,7 +377,7 @@ export default function ContractToOppWorkflow() {
                   }}
                   className="flex-1 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
                 >
-                  Open All in Salesforce ↗
+                  Open All to Download ↗
                 </button>
                 <a
                   href={GEM_URLS.contractReport}
