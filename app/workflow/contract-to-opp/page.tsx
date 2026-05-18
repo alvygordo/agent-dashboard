@@ -373,7 +373,7 @@ export default function ContractToOppWorkflow() {
                 <button
                   onClick={() => {
                     const urls = [contractUrl, isPackage && baseContractUrl, msaUrl].filter(Boolean) as string[]
-                    urls.forEach(u => window.open(u, "_blank", "noopener,noreferrer"))
+                    urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener,noreferrer"), i * 300))
                   }}
                   className="flex-1 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
                 >
