@@ -86,5 +86,5 @@ export function getAgent(id: string): Agent | undefined {
 // GEM URLS — external Gemini Gem links
 // ─────────────────────────────────────────────────────────────
 export const GEM_URLS = {
-  contractReport: "https://gemini.google.com/gem/contract-report-generator", // update with real Gem URL
+  contractReport: "https://gemini.google.com/gem/ae20cb53e35f",
 }
