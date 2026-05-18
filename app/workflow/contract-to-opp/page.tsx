@@ -11,23 +11,31 @@ import { ArrowRight, ArrowLeft, Bot, CheckCircle, ExternalLink, Copy, Check, Ale
 type Step = "opp-input" | "find-contract" | "handoff"
 
 export default function ContractToOppWorkflow() {
-  const [step, setStep]               = useState<Step>("opp-input")
-  const [oppName, setOppName]         = useState("")
-  const [oppNameError, setOppNameError] = useState("")
-  const [contractUrl, setContractUrl] = useState("")
-  const [contractTitle, setContractTitle] = useState("")
-  const [copiedOpp, setCopiedOpp]     = useState(false)
-  const [copiedContract, setCopiedContract] = useState(false)
-  const [iframeLoaded, setIframeLoaded] = useState(false)
+  const [step, setStep]                       = useState<Step>("opp-input")
+  const [oppName, setOppName]                 = useState("")
+  const [oppNameError, setOppNameError]       = useState("")
+  const [contractUrl, setContractUrl]         = useState("")
+  const [contractTitle, setContractTitle]     = useState("")
+  const [baseContractUrl, setBaseContractUrl] = useState("")
+  const [baseContractTitle, setBaseContractTitle] = useState("")
+  const [isPackage, setIsPackage]             = useState(false)
+  const [copiedOpp, setCopiedOpp]             = useState(false)
+  const [copiedContract, setCopiedContract]   = useState(false)
+  const [copiedBase, setCopiedBase]           = useState(false)
+  const [iframeLoaded, setIframeLoaded]       = useState(false)
 
   const contractFinder = getAgent("contract-finder")!
   const oppPrep        = getAgent("opp-prep-ai")!
 
-  // Listen for the contract result sent from the embedded Contract Finder
+  // Listen for the contract result sent from the embedded Contract Finder.
+  // Forwards the full payload to the next agent so swapping agents requires no changes here.
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "contract-finder-result") {
       setContractUrl(event.data.contractUrl ?? "")
       setContractTitle(event.data.title ?? "")
+      setBaseContractUrl(event.data.baseContractUrl ?? "")
+      setBaseContractTitle(event.data.baseContractTitle ?? "")
+      setIsPackage(event.data.isPackage === true)
       setStep("handoff")
     }
   }, [])
@@ -47,16 +55,33 @@ export default function ContractToOppWorkflow() {
     setStep("find-contract")
   }
 
-  function copyToClipboard(text: string, type: "opp" | "contract") {
+  function copyToClipboard(text: string, type: "opp" | "contract" | "base") {
     navigator.clipboard.writeText(text)
-    if (type === "opp") { setCopiedOpp(true); setTimeout(() => setCopiedOpp(false), 2000) }
-    else { setCopiedContract(true); setTimeout(() => setCopiedContract(false), 2000) }
+    if (type === "opp")      { setCopiedOpp(true);      setTimeout(() => setCopiedOpp(false), 2000) }
+    else if (type === "base"){ setCopiedBase(true);     setTimeout(() => setCopiedBase(false), 2000) }
+    else                     { setCopiedContract(true); setTimeout(() => setCopiedContract(false), 2000) }
+  }
+
+  function resetWorkflow() {
+    setStep("opp-input")
+    setOppName("")
+    setContractUrl("")
+    setContractTitle("")
+    setBaseContractUrl("")
+    setBaseContractTitle("")
+    setIsPackage(false)
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
-  const oppPrepUrl        = contractUrl
-    ? `${oppPrep.url}?opp=${encodeURIComponent(oppName)}&contract=${encodeURIComponent(contractUrl)}`
-    : oppPrep.url
+
+  // Build next-agent URL — always passes contract; adds baseContract when it's a package.
+  // No hardcoded Opp Prep AI logic: just forward whatever Contract Finder sent.
+  const nextAgentUrl = (() => {
+    if (!contractUrl) return oppPrep.url
+    const params = new URLSearchParams({ opp: oppName, contract: contractUrl })
+    if (isPackage && baseContractUrl) params.set("baseContract", baseContractUrl)
+    return `${oppPrep.url}?${params.toString()}`
+  })()
 
   const stepIndex = { "opp-input": 0, "find-contract": 1, "handoff": 2 }[step]
 
@@ -203,10 +228,14 @@ export default function ContractToOppWorkflow() {
               <Badge className="bg-green-100 text-green-700 border border-green-300 mb-3">Step 3 of 3</Badge>
               <div className="flex items-center gap-2 mb-1">
                 <CheckCircle className="w-5 h-5 text-green-500" />
-                <h2 className="text-xl font-bold text-gray-900">Contract Confirmed</h2>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {isPackage ? "Contract Package Confirmed" : "Contract Confirmed"}
+                </h2>
               </div>
               <p className="text-sm text-gray-500">
-                Copy both details below, then launch Opp Prep AI. Paste each value into the matching field.
+                {isPackage
+                  ? "An amendment + base contract were found. Both will be sent to Opp Prep AI automatically."
+                  : "Copy both details below, then launch Opp Prep AI. Paste each value into the matching field."}
               </p>
             </div>
 
@@ -227,9 +256,11 @@ export default function ContractToOppWorkflow() {
               </div>
             </div>
 
-            {/* Contract */}
+            {/* Amendment (primary contract) */}
             <div className="space-y-1">
-              <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">2 — Contract Link</p>
+              <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">
+                {isPackage ? "2 — Amendment (overrides)" : "2 — Contract Link"}
+              </p>
               <p className="text-xs text-gray-400">Paste into: <em>Salesforce Document Links</em></p>
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
                 {contractTitle && (
@@ -250,7 +281,32 @@ export default function ContractToOppWorkflow() {
               </div>
             </div>
 
-            <a href={oppPrepUrl} target="_blank" rel="noopener noreferrer">
+            {/* Base contract — only shown when it's a package */}
+            {isPackage && baseContractUrl && (
+              <div className="space-y-1">
+                <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">3 — Base Contract (full terms)</p>
+                <p className="text-xs text-gray-400">Used by Opp Prep AI as the source of base terms</p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+                  {baseContractTitle && (
+                    <p className="text-xs text-gray-600 font-medium leading-snug">{baseContractTitle}</p>
+                  )}
+                  <div className="flex items-center justify-between gap-3">
+                    <a href={baseContractUrl} target="_blank" rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1 truncate">
+                      <span className="truncate">View document ↗</span>
+                    </a>
+                    <button
+                      onClick={() => copyToClipboard(baseContractUrl, "base")}
+                      className="shrink-0 flex items-center gap-1.5 text-xs bg-white border border-gray-300 text-gray-600 hover:bg-blue-50 hover:border-blue-400 hover:text-blue-700 rounded-md px-3 py-1.5 transition-colors cursor-pointer font-medium"
+                    >
+                      {copiedBase ? <><Check className="w-3 h-3 text-green-600" /> Copied!</> : <><Copy className="w-3 h-3" /> Copy</>}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <a href={nextAgentUrl} target="_blank" rel="noopener noreferrer">
               <Button className="w-full bg-purple-700 hover:bg-purple-800 text-white py-5 text-base cursor-pointer">
                 Launch Opp Prep AI <ExternalLink className="w-4 h-4 ml-2" />
               </Button>
@@ -259,7 +315,7 @@ export default function ContractToOppWorkflow() {
             <Separator className="bg-gray-100" />
 
             <Button
-              onClick={() => { setStep("opp-input"); setOppName(""); setContractUrl(""); setContractTitle("") }}
+              onClick={resetWorkflow}
               variant="outline"
               className="w-full border-purple-300 text-purple-700 hover:bg-purple-50 cursor-pointer"
             >
