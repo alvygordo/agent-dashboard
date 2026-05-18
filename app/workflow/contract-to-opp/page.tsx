@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
-import { getAgent } from "@/lib/agents"
+import { getAgent, GEM_URLS } from "@/lib/agents"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -19,6 +19,8 @@ export default function ContractToOppWorkflow() {
   const [baseContractUrl, setBaseContractUrl] = useState("")
   const [baseContractTitle, setBaseContractTitle] = useState("")
   const [isPackage, setIsPackage]             = useState(false)
+  const [msaUrl, setMsaUrl]                   = useState("")
+  const [msaTitle, setMsaTitle]               = useState("")
   const [copiedOpp, setCopiedOpp]             = useState(false)
   const [copiedContract, setCopiedContract]   = useState(false)
   const [copiedBase, setCopiedBase]           = useState(false)
@@ -36,6 +38,8 @@ export default function ContractToOppWorkflow() {
       setBaseContractUrl(event.data.baseContractUrl ?? "")
       setBaseContractTitle(event.data.baseContractTitle ?? "")
       setIsPackage(event.data.isPackage === true)
+      setMsaUrl(event.data.msaUrl ?? "")
+      setMsaTitle(event.data.msaTitle ?? "")
       setStep("handoff")
     }
   }, [])
@@ -70,6 +74,8 @@ export default function ContractToOppWorkflow() {
     setBaseContractUrl("")
     setBaseContractTitle("")
     setIsPackage(false)
+    setMsaUrl("")
+    setMsaTitle("")
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
@@ -311,6 +317,78 @@ export default function ContractToOppWorkflow() {
                 Launch Opp Prep AI <ExternalLink className="w-4 h-4 ml-2" />
               </Button>
             </a>
+
+            <Separator className="bg-gray-100" />
+
+            {/* Generate Contract Report section */}
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-800">Generate Contract Report</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Download the documents below, then upload them to the Contract Report Generator Gem to produce a full PDF report.
+                </p>
+              </div>
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                {/* Amendment / contract */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">
+                      {isPackage ? "Amendment" : "Contract"}
+                    </p>
+                    {contractTitle && <p className="text-xs text-gray-700 truncate">{contractTitle}</p>}
+                  </div>
+                  <a href={contractUrl} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 font-medium">
+                    View ↗
+                  </a>
+                </div>
+                {/* Base contract */}
+                {isPackage && baseContractUrl && (
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Base Contract</p>
+                      {baseContractTitle && <p className="text-xs text-gray-700 truncate">{baseContractTitle}</p>}
+                    </div>
+                    <a href={baseContractUrl} target="_blank" rel="noopener noreferrer"
+                      className="shrink-0 text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 font-medium">
+                      View ↗
+                    </a>
+                  </div>
+                )}
+                {/* MSA */}
+                {msaUrl && (
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
+                    <div className="min-w-0">
+                      <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">MSA</p>
+                      {msaTitle && <p className="text-xs text-gray-700 truncate">{msaTitle}</p>}
+                    </div>
+                    <a href={msaUrl} target="_blank" rel="noopener noreferrer"
+                      className="shrink-0 text-xs text-purple-600 hover:text-purple-800 flex items-center gap-1 font-medium">
+                      View ↗
+                    </a>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    const urls = [contractUrl, isPackage && baseContractUrl, msaUrl].filter(Boolean) as string[]
+                    urls.forEach(u => window.open(u, "_blank", "noopener,noreferrer"))
+                  }}
+                  className="flex-1 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
+                >
+                  Open All in Salesforce ↗
+                </button>
+                <a
+                  href={GEM_URLS.contractReport}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-3 py-2 font-medium transition-colors text-center"
+                >
+                  Open Contract Report Gem ↗
+                </a>
+              </div>
+            </div>
 
             <Separator className="bg-gray-100" />
 

@@ -81,3 +81,10 @@ export const workflows: Workflow[] = [
 export function getAgent(id: string): Agent | undefined {
   return agents.find((a) => a.id === id)
 }
+
+// ─────────────────────────────────────────────────────────────
+// GEM URLS — external Gemini Gem links
+// ─────────────────────────────────────────────────────────────
+export const GEM_URLS = {
+  contractReport: "https://gemini.google.com/gem/contract-report-generator", // update with real Gem URL
+}
