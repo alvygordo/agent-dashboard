@@ -34,14 +34,14 @@ export const agents: Agent[] = [
     id: "contract-finder",
     name: "Contract Finder",
     description: "Search by opportunity name to find the most likely contract document.",
-    url: "https://sandbox-contract-finder.vercel.app/",
+    url: process.env.NEXT_PUBLIC_CONTRACT_FINDER_URL ?? "https://sandbox-contract-finder.vercel.app/",
     status: "active",
   },
   {
     id: "opp-prep-ai",
     name: "Opp Prep AI",
     description: "Prepare your opportunity with AI-powered insights and analysis.",
-    url: "https://sandbox-opp-prep.vercel.app/",
+    url: process.env.NEXT_PUBLIC_OPP_PREP_URL ?? "https://sandbox-opp-prep.vercel.app/",
     status: "active",
   },
   {
