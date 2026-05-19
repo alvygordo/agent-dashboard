@@ -34,7 +34,7 @@ export const agents: Agent[] = [
     id: "contract-finder",
     name: "Contract Finder",
     description: "Search by opportunity name to find the most likely contract document.",
-    url: "https://contract-finder-one.vercel.app/",
+    url: "https://sandbox-contract-finder.vercel.app/",
     status: "active",
   },
   {
