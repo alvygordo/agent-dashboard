@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, ArrowLeft, Bot, CheckCircle, ExternalLink, Copy, Check, AlertCircle } from "lucide-react"
 
-type Step = "opp-input" | "find-contract" | "handoff"
+type Step = "opp-input" | "find-contract" | "handoff" | "gem"
 
 export default function ContractToOppWorkflow() {
   const [step, setStep]                       = useState<Step>("opp-input")
@@ -90,7 +90,7 @@ export default function ContractToOppWorkflow() {
     return `${oppPrep.url}?${params.toString()}`
   })()
 
-  const stepIndex = { "opp-input": 0, "find-contract": 1, "handoff": 2 }[step]
+  const stepIndex = { "opp-input": 0, "find-contract": 1, "handoff": 2, "gem": 3 }[step]
 
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col">
@@ -134,6 +134,7 @@ export default function ContractToOppWorkflow() {
             { label: "Enter Opportunity" },
             { label: "Find Contract" },
             { label: "Opp Prep AI" },
+            { label: "Contract Report Gem" },
           ].map((s, i) => {
             const isActive = stepIndex === i
             const isDone   = stepIndex > i
@@ -148,7 +149,7 @@ export default function ContractToOppWorkflow() {
                     {s.label}
                   </span>
                 </div>
-                {i < 2 && <ArrowRight className="w-3 h-3 text-gray-300" />}
+                {i < 3 && <ArrowRight className="w-3 h-3 text-gray-300" />}
               </div>
             )
           })}
@@ -327,77 +328,104 @@ export default function ContractToOppWorkflow() {
               </Button>
             </a>
 
+            <Button
+              onClick={() => setStep("gem")}
+              variant="outline"
+              className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
+            >
+              Continue to Step 4: Contract Report Gem <ArrowRight className="w-4 h-4 ml-2" />
+            </Button>
+
             <Separator className="bg-gray-100" />
 
-            {/* Generate Contract Report section */}
-            <div className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-gray-800">Generate Contract Report</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Open each document in Salesforce to download it, then upload to the Contract Report Generator Gem.
-                </p>
+            <Button
+              onClick={resetWorkflow}
+              variant="outline"
+              className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
+            >
+              Run Another Opportunity
+            </Button>
+
+            <Link href="/">
+              <Button variant="ghost" className="w-full text-gray-400 hover:text-gray-700 cursor-pointer">
+                <ArrowLeft className="w-3 h-3 mr-2" /> Back to Dashboard
+              </Button>
+            </Link>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── STEP 4: CONTRACT REPORT GEM ── */}
+      {step === "gem" && (
+        <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
+          <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
+
+            <div>
+              <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of 4</Badge>
+              <h2 className="text-xl font-bold text-gray-900">Generate Contract Report</h2>
+              <p className="text-sm text-gray-500 mt-1">
+                Open each document below to download it from Salesforce, then upload them to the Contract Report Generator Gem.
+              </p>
+            </div>
+
+            <Separator className="bg-gray-100" />
+
+            {/* Document links */}
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">
+                    {isPackage ? "Amendment" : "Contract"}
+                  </p>
+                  {contractTitle && <p className="text-xs text-gray-700 truncate">{contractTitle}</p>}
+                </div>
+                <a href={contractUrl} target="_blank" rel="noopener noreferrer"
+                  className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] font-medium">
+                  View ↗
+                </a>
               </div>
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
-                {/* Amendment / contract */}
-                <div className="flex items-center justify-between gap-2">
+              {isPackage && baseContractUrl && (
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
                   <div className="min-w-0">
-                    <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">
-                      {isPackage ? "Amendment" : "Contract"}
-                    </p>
-                    {contractTitle && <p className="text-xs text-gray-700 truncate">{contractTitle}</p>}
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Base Contract</p>
+                    {baseContractTitle && <p className="text-xs text-gray-700 truncate">{baseContractTitle}</p>}
                   </div>
-                  <a href={contractUrl} target="_blank" rel="noopener noreferrer"
-                    className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] flex items-center gap-1 font-medium">
+                  <a href={baseContractUrl} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] font-medium">
                     View ↗
                   </a>
                 </div>
-                {/* Base contract */}
-                {isPackage && baseContractUrl && (
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
-                    <div className="min-w-0">
-                      <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Base Contract</p>
-                      {baseContractTitle && <p className="text-xs text-gray-700 truncate">{baseContractTitle}</p>}
-                    </div>
-                    <a href={baseContractUrl} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] flex items-center gap-1 font-medium">
-                      View ↗
-                    </a>
+              )}
+              {msaUrl && (
+                <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">MSA</p>
+                    {msaTitle && <p className="text-xs text-gray-700 truncate">{msaTitle}</p>}
                   </div>
-                )}
-                {/* MSA */}
-                {msaUrl && (
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
-                    <div className="min-w-0">
-                      <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">MSA</p>
-                      {msaTitle && <p className="text-xs text-gray-700 truncate">{msaTitle}</p>}
-                    </div>
-                    <a href={msaUrl} target="_blank" rel="noopener noreferrer"
-                      className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] flex items-center gap-1 font-medium">
-                      View ↗
-                    </a>
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => {
-                    const urls = [contractUrl, isPackage && baseContractUrl, msaUrl].filter(Boolean) as string[]
-                    urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener,noreferrer"), i * 300))
-                  }}
-                  className="flex-1 text-xs bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
-                >
-                  Open All to Download ↗
-                </button>
-                <a
-                  href={GEM_URLS.contractReport}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex-1 text-xs bg-[#00b4a2] hover:bg-[#009688] text-white rounded-lg px-3 py-2 font-medium transition-colors text-center"
-                >
-                  Open Contract Report Gem ↗
-                </a>
-              </div>
+                  <a href={msaUrl} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] font-medium">
+                    View ↗
+                  </a>
+                </div>
+              )}
             </div>
+
+            <button
+              onClick={() => {
+                const urls = [contractUrl, isPackage && baseContractUrl, msaUrl].filter(Boolean) as string[]
+                urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener,noreferrer"), i * 300))
+              }}
+              className="w-full text-sm bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
+            >
+              Open All to Download ↗
+            </button>
+
+            <a href={GEM_URLS.contractReport} target="_blank" rel="noopener noreferrer">
+              <Button className={`w-full py-5 text-base cursor-pointer ${theme.btnPrimary}`}>
+                Open Contract Report Gem <ExternalLink className="w-4 h-4 ml-2" />
+              </Button>
+            </a>
 
             <Separator className="bg-gray-100" />
 

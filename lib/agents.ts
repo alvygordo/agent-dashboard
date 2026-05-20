@@ -74,6 +74,11 @@ export const workflows: Workflow[] = [
         label: "Step 2: Opp Prep AI",
         requiresConfirmation: false,
       },
+      {
+        agentId: "contract-report-gem",
+        label: "Step 3: Contract Report Gem",
+        requiresConfirmation: false,
+      },
     ],
   },
 ]
