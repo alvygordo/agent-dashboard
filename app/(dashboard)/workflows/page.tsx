@@ -17,7 +17,7 @@ export default function WorkflowsPage() {
         <p className="text-sm text-gray-500">Multi-step automated workflows that chain agents together.</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4">
         {workflows.map((wf) => (
           <Card key={wf.id} className={`bg-white border-gray-200 transition-all ${theme.cardHover}`}>
             <CardHeader className="pb-3">
