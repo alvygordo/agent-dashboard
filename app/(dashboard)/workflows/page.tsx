@@ -30,11 +30,11 @@ export default function WorkflowsPage() {
               <CardDescription className="text-gray-500 text-sm">{wf.description}</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
+              <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1 flex-nowrap">
                 {wf.steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 border border-gray-200">{step.label}</span>
-                    {i < wf.steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400" />}
+                  <div key={i} className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 border border-gray-200 whitespace-nowrap">{step.label}</span>
+                    {i < wf.steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />}
                   </div>
                 ))}
               </div>

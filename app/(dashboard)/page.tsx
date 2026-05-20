@@ -12,15 +12,8 @@ export default function Home() {
 
       {/* Welcome */}
       <div className="space-y-2">
-        {theme.isProd && (
-          <div className="flex justify-start mb-4">
-            <span className="bg-[#e0f7f5] text-[#009688] border border-[#b2e8e2] text-xs font-semibold px-4 py-1.5 rounded-full tracking-wide">
-              LIVE — PRODUCTION
-            </span>
-          </div>
-        )}
         <h1 className="text-2xl font-bold text-gray-900">
-          Welcome to the Core Renewals – Sales Ops Agent Dashboard!
+          Welcome to Sales Ops Agent Dashboard!
         </h1>
         <p className="text-gray-500 text-sm">
           Your central hub for AI-powered workflows, agents, and tools. Select a section from the sidebar or browse everything below.
@@ -46,11 +39,11 @@ export default function Home() {
                 <CardDescription className="text-gray-500 text-sm">{wf.description}</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1 flex-nowrap">
                   {wf.steps.map((step, i) => (
-                    <div key={i} className="flex items-center gap-2">
-                      <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 border border-gray-200">{step.label}</span>
-                      {i < wf.steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400" />}
+                    <div key={i} className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-xs bg-gray-100 text-gray-600 rounded px-2 py-1 border border-gray-200 whitespace-nowrap">{step.label}</span>
+                      {i < wf.steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-400 shrink-0" />}
                     </div>
                   ))}
                 </div>

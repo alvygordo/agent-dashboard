@@ -20,7 +20,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             </div>
             <div>
               <h1 className={`text-base font-semibold ${theme.headerText}`}>Agent Dashboard</h1>
-              <p className={`text-xs ${theme.headerSub}`}>Sales Ops · Agent Hub</p>
+              <p className={`text-xs ${theme.headerSub}`}>Sales Ops · Core Renewals</p>
             </div>
           </div>
           {theme.isProd && (

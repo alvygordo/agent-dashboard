@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, Home, Layers, Sparkles } from "lucide-react"
+import { Home, Layers, Bot, Sparkles } from "lucide-react"
 import { theme } from "@/lib/theme"
 
 const navItems = [
@@ -28,15 +28,9 @@ export default function Sidebar() {
   return (
     <aside className={`w-52 shrink-0 min-h-screen flex flex-col ${sidebarBg}`}>
 
-      {/* Logo */}
-      <div className={`px-4 py-5 flex items-center gap-3 border-b border-gray-200`}>
-        <div className={`w-8 h-8 rounded-lg ${theme.avatarBg} flex items-center justify-center shrink-0`}>
-          <Bot className="w-4 h-4 text-white" />
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 leading-tight">Agent Dashboard</p>
-          <p className="text-xs text-gray-400 leading-tight">Sales Ops · Agent Hub</p>
-        </div>
+      {/* Nav label */}
+      <div className="px-4 py-4 border-b border-gray-200">
+        <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Navigation</p>
       </div>
 
       {/* Nav */}
