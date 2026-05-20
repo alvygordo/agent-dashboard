@@ -19,7 +19,7 @@ export default function Home() {
 
       {/* Header */}
       <div className={theme.headerBg}>
-        <div className="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+        <div className="px-6 py-5 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`w-8 h-8 rounded-lg ${theme.avatarBg} flex items-center justify-center`}>
               <Bot className="w-4 h-4 text-white" />
