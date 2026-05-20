@@ -88,8 +88,47 @@ export function getAgent(id: string): Agent | undefined {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GEM URLS — external Gemini Gem links
+// TOOLS — GPTs & Gems; add new entries here
 // ─────────────────────────────────────────────────────────────
+export type ToolKind = "gem" | "gpt"
+
+export type Tool = {
+  id: string
+  name: string
+  description: string
+  url: string
+  kind: ToolKind
+  status: "active" | "coming-soon"
+}
+
+export const tools: Tool[] = [
+  {
+    id: "contract-report-gem",
+    name: "Contract Report Generator",
+    description: "Generates a contract analysis report with hierarchy, key clause analysis, narrative, and comparison to ESW terms.",
+    url: "https://gemini.google.com/gem/ae20cb53e35f",
+    kind: "gem",
+    status: "active",
+  },
+  {
+    id: "khoros-deprovisioning-gem",
+    name: "Khoros Deprovisioning",
+    description: "Extract the Khoros instances required to process the Khoros Deprovisioning ticket.",
+    url: "https://gemini.google.com/gem/2cc0ea7b4320",
+    kind: "gem",
+    status: "active",
+  },
+  {
+    id: "nnr-draft-assistant-gpt",
+    name: "NNR Draft Assistant",
+    description: "Aids in NNR draft creation.",
+    url: "https://chatgpt.com/g/g-68dd021b2be08191b85d61049e59cf17-nnr-draft-assistant",
+    kind: "gpt",
+    status: "active",
+  },
+]
+
+// kept for backwards-compat with workflow page
 export const GEM_URLS = {
   contractReport: "https://gemini.google.com/gem/ae20cb53e35f",
 }
