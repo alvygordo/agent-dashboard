@@ -22,6 +22,7 @@ export default function ContractToOppWorkflow() {
   const [isPackage, setIsPackage]             = useState(false)
   const [msaUrl, setMsaUrl]                   = useState("")
   const [msaTitle, setMsaTitle]               = useState("")
+  const [additionalDocs, setAdditionalDocs]   = useState<{url: string, title: string}[]>([])
   const [copiedOpp, setCopiedOpp]             = useState(false)
   const [copiedContract, setCopiedContract]   = useState(false)
   const [copiedBase, setCopiedBase]           = useState(false)
@@ -41,6 +42,7 @@ export default function ContractToOppWorkflow() {
       setIsPackage(event.data.isPackage === true)
       setMsaUrl(event.data.msaUrl ?? "")
       setMsaTitle(event.data.msaTitle ?? "")
+      setAdditionalDocs(Array.isArray(event.data.additionalDocs) ? event.data.additionalDocs : [])
       setStep("handoff")
     }
   }, [])
@@ -77,6 +79,7 @@ export default function ContractToOppWorkflow() {
     setIsPackage(false)
     setMsaUrl("")
     setMsaTitle("")
+    setAdditionalDocs([])
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
@@ -409,11 +412,23 @@ export default function ContractToOppWorkflow() {
                   </a>
                 </div>
               )}
+              {additionalDocs.map((doc, i) => (
+                <div key={i} className="flex items-center justify-between gap-2 pt-1 border-t border-gray-200">
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-400 uppercase tracking-wide font-medium">Additional Doc {i + 1}</p>
+                    {doc.title && <p className="text-xs text-gray-700 truncate">{doc.title}</p>}
+                  </div>
+                  <a href={doc.url} target="_blank" rel="noopener noreferrer"
+                    className="shrink-0 text-xs text-[#00b4a2] hover:text-[#009688] font-medium">
+                    View ↗
+                  </a>
+                </div>
+              ))}
             </div>
 
             <button
               onClick={() => {
-                const urls = [contractUrl, isPackage && baseContractUrl, msaUrl].filter(Boolean) as string[]
+                const urls = [contractUrl, isPackage && baseContractUrl, msaUrl, ...additionalDocs.map(d => d.url)].filter(Boolean) as string[]
                 urls.forEach((u, i) => setTimeout(() => window.open(u, "_blank", "noopener,noreferrer"), i * 300))
               }}
               className="w-full text-sm bg-white border border-gray-300 text-gray-700 hover:bg-gray-50 rounded-lg px-3 py-2 font-medium transition-colors cursor-pointer"
