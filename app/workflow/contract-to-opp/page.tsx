@@ -144,20 +144,25 @@ export default function ContractToOppWorkflow() {
             return (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <button
-                    disabled={!isDone}
-                    onClick={() => {
-                      if (s.stepName === "find-contract") setIframeLoaded(false)
-                      setStep(s.stepName)
-                    }}
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
-                      ${isDone ? "bg-green-500 text-white cursor-pointer hover:bg-green-600" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}
-                  >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
+                    ${isDone ? "bg-green-500 text-white" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}>
                     {isDone ? "✓" : i + 1}
-                  </button>
-                  <span className={`text-sm ${isActive ? "text-gray-900 font-medium" : isDone ? "text-green-600" : "text-gray-400"}`}>
-                    {s.label}
-                  </span>
+                  </div>
+                  {isDone ? (
+                    <button
+                      onClick={() => {
+                        if (s.stepName === "find-contract") setIframeLoaded(false)
+                        setStep(s.stepName)
+                      }}
+                      className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium transition-colors"
+                    >
+                      {s.label}
+                    </button>
+                  ) : (
+                    <span className={`text-sm ${isActive ? "text-gray-900 font-medium" : "text-gray-400"}`}>
+                      {s.label}
+                    </span>
+                  )}
                 </div>
                 {i < 3 && <ArrowRight className="w-3 h-3 text-gray-300" />}
               </div>
