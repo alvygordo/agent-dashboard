@@ -133,21 +133,28 @@ export default function ContractToOppWorkflow() {
       {/* Progress Steps */}
       <div className="border-b border-gray-200 bg-white shrink-0">
         <div className="px-6 py-3 flex items-center gap-4">
-          {[
-            { label: "Enter Opportunity" },
-            { label: "Find Contract" },
-            { label: "Opp Prep AI" },
-            { label: "Contract Report Gem" },
-          ].map((s, i) => {
+          {([
+            { label: "Enter Opportunity", stepName: "opp-input" },
+            { label: "Find Contract",     stepName: "find-contract" },
+            { label: "Opp Prep AI",       stepName: "handoff" },
+            { label: "Contract Report Gem", stepName: "gem" },
+          ] as { label: string; stepName: Step }[]).map((s, i) => {
             const isActive = stepIndex === i
             const isDone   = stepIndex > i
             return (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
-                    ${isDone ? "bg-green-500 text-white" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}>
+                  <button
+                    disabled={!isDone}
+                    onClick={() => {
+                      if (s.stepName === "find-contract") setIframeLoaded(false)
+                      setStep(s.stepName)
+                    }}
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
+                      ${isDone ? "bg-green-500 text-white cursor-pointer hover:bg-green-600" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}
+                  >
                     {isDone ? "✓" : i + 1}
-                  </div>
+                  </button>
                   <span className={`text-sm ${isActive ? "text-gray-900 font-medium" : isDone ? "text-green-600" : "text-gray-400"}`}>
                     {s.label}
                   </span>
