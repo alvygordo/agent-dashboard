@@ -45,6 +45,13 @@ export const agents: Agent[] = [
     status: "active",
   },
   {
+    id: "ns-agent",
+    name: "NS Agent",
+    description: "Extract subscription, customer, and billing data from NetSuite.",
+    url: process.env.NEXT_PUBLIC_NS_AGENT_URL ?? "http://localhost:3001/",
+    status: "active",
+  },
+  {
     id: "finalizing-closer",
     name: "Finalizing-Closer Agent",
     description: "Autonomously resolves opportunities stuck in the Finalizing stage in Salesforce. Completes blocking tasks, flags high-value items, and logs everything to a live monitoring dashboard.",
@@ -77,6 +84,25 @@ export const workflows: Workflow[] = [
       {
         agentId: "contract-report-gem",
         label: "Step 3: Contract Report Gem",
+        requiresConfirmation: false,
+      },
+    ],
+  },
+  {
+    id: "opp-prep-automation",
+    name: "Opp Prep Automation",
+    description: "Full automated renewal analysis — contract data, NS data, SF data, and comparison summary.",
+    status: "coming-soon",
+    steps: [
+      {
+        agentId: "contract-finder",
+        label: "Step 1: Find Contract",
+        requiresConfirmation: true,
+        confirmationPrompt: "Did Contract Finder find the correct contract?",
+      },
+      {
+        agentId: "ns-agent",
+        label: "Step 2: NS Agent",
         requiresConfirmation: false,
       },
     ],
