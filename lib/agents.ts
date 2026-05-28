@@ -59,7 +59,7 @@ export const agents: Agent[] = [
 export const workflows: Workflow[] = [
   {
     id: "contract-to-opp",
-    name: "Contract → Opp Prep",
+    name: "Opp Prep Assistant",
     description: "Find the correct contract, confirm it, then launch Opp Prep AI.",
     status: "active",
     steps: [

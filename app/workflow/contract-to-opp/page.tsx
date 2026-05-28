@@ -112,7 +112,7 @@ export default function ContractToOppWorkflow() {
             </div>
             <div>
               <h1 className={`text-base font-semibold ${theme.headerText}`}>Agent Dashboard</h1>
-              <p className={`text-xs ${theme.headerSub}`}>Contract → Opp Prep Workflow</p>
+              <p className={`text-xs ${theme.headerSub}`}>Opp Prep Assistant</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
