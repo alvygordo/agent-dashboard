@@ -1,0 +1,71 @@
+import { NextRequest, NextResponse } from 'next/server'
+
+export async function GET(request: NextRequest) {
+  const code = request.nextUrl.searchParams.get('code')
+
+  if (!code) {
+    return NextResponse.redirect(new URL('/login?error=no_code', request.url))
+  }
+
+  const codeVerifier = request.cookies.get('sf_code_verifier')?.value
+  if (!codeVerifier) {
+    return NextResponse.redirect(new URL('/login?error=no_verifier', request.url))
+  }
+
+  try {
+    const sfDomain = process.env.NEXT_PUBLIC_ENV === 'production'
+      ? 'https://trilogy-sales.my.salesforce.com'
+      : 'https://trilogy-sales--full.sandbox.my.salesforce.com'
+
+    const tokenRes = await fetch(`${sfDomain}/services/oauth2/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code',
+        code,
+        client_id: process.env.SF_CONSUMER_KEY!,
+        client_secret: process.env.SF_CONSUMER_SECRET!,
+        redirect_uri: process.env.SF_CALLBACK_URL!,
+        code_verifier: codeVerifier
+      })
+    })
+
+    const tokenData = await tokenRes.json()
+
+    if (!tokenRes.ok || !tokenData.access_token) {
+      console.error('SF token error:', tokenData)
+      return NextResponse.redirect(new URL('/login?error=token_failed', request.url))
+    }
+
+    const userRes = await fetch(tokenData.id, {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    })
+    const userData = await userRes.json()
+
+    const email = userData.email?.toLowerCase().trim()
+    const displayName = userData.display_name || userData.name ||
+      `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || email
+
+    if (!email) {
+      return NextResponse.redirect(new URL('/login?error=no_email', request.url))
+    }
+
+    const response = NextResponse.redirect(new URL('/', request.url))
+    response.cookies.set('agent_dashboard_user', email, {
+      path: '/',
+      maxAge: 86400,
+      httpOnly: false
+    })
+    response.cookies.set('agent_dashboard_user_name', displayName, {
+      path: '/',
+      maxAge: 86400,
+      httpOnly: false
+    })
+    response.cookies.delete('sf_code_verifier')
+
+    return response
+  } catch (err) {
+    console.error('SF OAuth error:', err)
+    return NextResponse.redirect(new URL('/login?error=oauth_failed', request.url))
+  }
+}

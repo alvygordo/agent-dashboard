@@ -26,7 +26,6 @@ export default function ContractToOppWorkflow() {
   const [copiedOpp, setCopiedOpp]             = useState(false)
   const [copiedContract, setCopiedContract]   = useState(false)
   const [copiedBase, setCopiedBase]           = useState(false)
-  const [iframeLoaded, setIframeLoaded]       = useState(false)
 
   const contractFinder = getAgent("contract-finder")!
   const oppPrep        = getAgent("opp-prep-ai")!
@@ -58,7 +57,6 @@ export default function ContractToOppWorkflow() {
       return
     }
     setOppNameError("")
-    setIframeLoaded(false)
     setStep("find-contract")
   }
 
@@ -96,7 +94,7 @@ export default function ContractToOppWorkflow() {
   const stepIndex = { "opp-input": 0, "find-contract": 1, "handoff": 2, "gem": 3 }[step]
 
   return (
-    <main className="min-h-screen bg-gray-50 flex flex-col">
+    <main className="min-h-screen bg-gray-50 flex flex-col relative">
 
       {/* Sandbox Banner — hidden in production */}
       {!theme.isProd && (
@@ -150,10 +148,7 @@ export default function ContractToOppWorkflow() {
                   </div>
                   {isDone ? (
                     <button
-                      onClick={() => {
-                        if (s.stepName === "find-contract") setIframeLoaded(false)
-                        setStep(s.stepName)
-                      }}
+                      onClick={() => setStep(s.stepName)}
                       className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium transition-colors"
                     >
                       {s.label}
@@ -170,6 +165,40 @@ export default function ContractToOppWorkflow() {
           })}
         </div>
       </div>
+
+      {/* Content area — iframe always mounted in background, other steps overlay it */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
+
+      {/* ── STEP 2: CONTRACT FINDER (permanent background layer) ── */}
+      <div className="absolute inset-0 flex flex-col">
+        {/* Instruction bar — only shown on step 2 */}
+        {step === "find-contract" && (
+          <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
+            <div className="flex items-center gap-2">
+              <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
+              <p className={`text-sm ${theme.instructionText}`}>
+                <strong>Review the results below.</strong> When you find the correct contract, click <strong>✓ Use this contract</strong> — it will be sent to the dashboard automatically.
+              </p>
+            </div>
+            <Button
+              onClick={() => setStep("opp-input")}
+              variant="ghost"
+              className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}
+            >
+              <ArrowLeft className="w-3 h-3 mr-1" /> Back
+            </Button>
+          </div>
+        )}
+        <iframe
+          src={contractFinderUrl}
+          className="flex-1 w-full border-0"
+          title="Contract Finder"
+        />
+      </div>
+
+      {/* Overlay for steps 1, 3, 4 — covers the iframe with a solid background */}
+      {step !== "find-contract" && (
+        <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col">
 
       {/* ── STEP 1: OPP NAME ── */}
       {step === "opp-input" && (
@@ -206,46 +235,6 @@ export default function ContractToOppWorkflow() {
               Open Contract Finder <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           </div>
-        </div>
-      )}
-
-      {/* ── STEP 2: CONTRACT FINDER EMBEDDED ── */}
-      {step === "find-contract" && (
-        <div className="flex flex-col flex-1 min-h-0">
-          {/* Instruction bar */}
-          <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
-            <div className="flex items-center gap-2">
-              <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
-              <p className={`text-sm ${theme.instructionText}`}>
-                <strong>Review the results below.</strong> When you find the correct contract, click <strong>✓ Use this contract</strong> — it will be sent to the dashboard automatically.
-              </p>
-            </div>
-            <Button
-              onClick={() => setStep("opp-input")}
-              variant="ghost"
-              className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}
-            >
-              <ArrowLeft className="w-3 h-3 mr-1" /> Back
-            </Button>
-          </div>
-
-          {/* Loading overlay */}
-          {!iframeLoaded && (
-            <div className="flex items-center justify-center py-16 text-gray-400 text-sm shrink-0">
-              <div className="flex items-center gap-2">
-                <div className={`w-4 h-4 border-2 ${theme.isProd ? "border-teal-200 border-t-[#00b4a2]" : "border-purple-300 border-t-purple-700"} rounded-full animate-spin`} />
-                Loading Contract Finder…
-              </div>
-            </div>
-          )}
-
-          {/* Iframe */}
-          <iframe
-            src={contractFinderUrl}
-            onLoad={() => setIframeLoaded(true)}
-            className={`flex-1 w-full border-0 transition-opacity ${iframeLoaded ? "opacity-100" : "opacity-0 h-0"}`}
-            title="Contract Finder"
-          />
         </div>
       )}
 
@@ -473,6 +462,9 @@ export default function ContractToOppWorkflow() {
           </div>
         </div>
       )}
+        </div>
+      )}
+      </div>
 
     </main>
   )
