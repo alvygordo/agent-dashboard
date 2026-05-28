@@ -294,7 +294,7 @@ export default function OppPrepAutomationWorkflow() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-green-800">Contract Found</p>
+                        <p className="text-sm font-medium text-green-800">Contract Finder</p>
                         {contractData?.contractTitle && (
                           <p className="text-xs text-green-600 truncate">{contractData.contractTitle}</p>
                         )}
@@ -303,21 +303,9 @@ export default function OppPrepAutomationWorkflow() {
                     <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
                       <div>
-                        <p className="text-sm font-medium text-green-800">NS Data Extracted</p>
+                        <p className="text-sm font-medium text-green-800">NS Agent</p>
                         <p className="text-xs text-green-600">{oppName}</p>
                       </div>
-                    </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2 opacity-50">
-                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
-                      <p className="text-sm text-gray-500">Contract Analyzer — coming soon</p>
-                    </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2 opacity-50">
-                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
-                      <p className="text-sm text-gray-500">SF Data Extractor — coming soon</p>
-                    </div>
-                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 flex items-center gap-2 opacity-50">
-                      <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
-                      <p className="text-sm text-gray-500">Comparison & Summary — coming soon</p>
                     </div>
                   </div>
 
