@@ -58,6 +58,13 @@ export const agents: Agent[] = [
     url: "https://trilogy-core-renewals-sales-ops.vercel.app/",
     status: "active",
   },
+  {
+    id: "contract-analyzer",
+    name: "Contract Analyzer Agent",
+    description: "Analyzes contract PDFs for a Salesforce opportunity, generates a Contract Report, updates 8 SF fields, and writes a journal summary.",
+    url: "",
+    status: "active",
+  },
 ]
 
 // ─────────────────────────────────────────────────────────────
