@@ -24,7 +24,7 @@ export default function AgentsPage() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {agents.map((agent) =>
           agent.id === "contract-analyzer" ? (
-            <ContractAnalyzerCard key={agent.id} agent={agent} />
+            <ContractAnalyzerCard key={agent.id} />
           ) : (
             <Card key={agent.id} className={`bg-white border-gray-200 transition-all ${theme.cardHover}`}>
               <CardHeader className="pb-3">
