@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { ArrowRight, Bot, Layers, Sparkles } from "lucide-react"
+import { ContractAnalyzerCard } from "@/components/contract-analyzer-card"
+
 
 export default function Home() {
   return (
@@ -69,30 +71,34 @@ export default function Home() {
           <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">Individual Agents</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {agents.map((agent) => (
-            <Card key={agent.id} className={`bg-white border-gray-200 transition-all ${theme.cardHover}`}>
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-                  <CardTitle className="text-sm text-gray-900">{agent.name}</CardTitle>
-                  <Badge className={agent.status === "active" ? "bg-green-100 text-green-700 border border-green-300 text-xs" : "bg-gray-100 text-gray-500 text-xs"}>
-                    {agent.status === "active" ? "Active" : "Coming Soon"}
-                  </Badge>
-                </div>
-                <CardDescription className="text-gray-500 text-xs">{agent.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {agent.status === "active" ? (
-                  <a href={agent.url} target="_blank" rel="noopener noreferrer">
-                    <Button variant="outline" className={`w-full text-sm cursor-pointer ${theme.agentBtn}`}>
-                      Open Agent <ArrowRight className="w-3 h-3 ml-2" />
-                    </Button>
-                  </a>
-                ) : (
-                  <Button disabled className="w-full text-sm" variant="secondary">Coming Soon</Button>
-                )}
-              </CardContent>
-            </Card>
-          ))}
+          {agents.map((agent) =>
+            agent.id === "contract-analyzer" ? (
+              <ContractAnalyzerCard key={agent.id} />
+            ) : (
+              <Card key={agent.id} className={`bg-white border-gray-200 transition-all ${theme.cardHover}`}>
+                <CardHeader className="pb-3">
+                  <div className="flex items-start justify-between">
+                    <CardTitle className="text-sm text-gray-900">{agent.name}</CardTitle>
+                    <Badge className={agent.status === "active" ? "bg-green-100 text-green-700 border border-green-300 text-xs" : "bg-gray-100 text-gray-500 text-xs"}>
+                      {agent.status === "active" ? "Active" : "Coming Soon"}
+                    </Badge>
+                  </div>
+                  <CardDescription className="text-gray-500 text-xs">{agent.description}</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {agent.status === "active" ? (
+                    <a href={agent.url} target="_blank" rel="noopener noreferrer">
+                      <Button variant="outline" className={`w-full text-sm cursor-pointer ${theme.agentBtn}`}>
+                        Open Agent <ArrowRight className="w-3 h-3 ml-2" />
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button disabled className="w-full text-sm" variant="secondary">Coming Soon</Button>
+                  )}
+                </CardContent>
+              </Card>
+            )
+          )}
         </div>
       </section>
 
