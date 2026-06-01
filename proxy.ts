@@ -15,11 +15,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
-  // AUTH TEMPORARILY DISABLED — re-enable once SF callback URLs confirmed
-  // const user = request.cookies.get('agent_dashboard_user')?.value
-  // if (!user) {
-  //   return NextResponse.redirect(new URL('/login', request.url))
-  // }
+  const user = request.cookies.get('agent_dashboard_user')?.value
+  if (!user) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
 
   return NextResponse.next()
 }
