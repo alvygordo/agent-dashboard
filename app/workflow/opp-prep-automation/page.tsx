@@ -36,6 +36,7 @@ export default function OppPrepAutomationWorkflow() {
   const [nsData, setNsData]           = useState<NSData | null>(null)
   const [analyzerStatus, setAnalyzerStatus] = useState<"idle" | "running" | "success" | "error">("idle")
   const [analyzerMessage, setAnalyzerMessage] = useState("")
+  const [completedSteps, setCompletedSteps] = useState<Set<Step>>(new Set())
   const nsIframeRef                   = useRef<HTMLIFrameElement>(null)
   const nsHandoffSent                 = useRef(false)
 
@@ -56,11 +57,13 @@ export default function OppPrepAutomationWorkflow() {
         oppId:             event.data.oppId ?? "",
       }
       setContractData(data)
+      setCompletedSteps(prev => new Set(prev).add("find-contract"))
       setStep("ns-agent")
     }
 
     if (event.data?.type === "ns-agent-result") {
       setNsData({ oppName: event.data.oppName, nsData: event.data.nsData })
+      setCompletedSteps(prev => new Set(prev).add("ns-agent"))
       setStep("contract-analyzer")
     }
   }, [])
@@ -104,6 +107,7 @@ export default function OppPrepAutomationWorkflow() {
       return
     }
     setOppNameError("")
+    setCompletedSteps(prev => new Set(prev).add("opp-input"))
     setStep("find-contract")
   }
 
@@ -143,7 +147,13 @@ export default function OppPrepAutomationWorkflow() {
     setNsData(null)
     setAnalyzerStatus("idle")
     setAnalyzerMessage("")
+    setCompletedSteps(new Set())
     nsHandoffSent.current = false
+  }
+
+  function goToStep(next: Step) {
+    setCompletedSteps(prev => new Set(prev).add(step))
+    setStep(next)
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
@@ -195,8 +205,9 @@ export default function OppPrepAutomationWorkflow() {
       <div className="border-b border-gray-200 bg-white shrink-0">
         <div className="px-6 py-3 flex items-center gap-4">
           {steps.map((s, i) => {
-            const isActive = stepIndex === i
-            const isDone   = stepIndex > i
+            const isActive    = step === s.stepName
+            const isDone      = completedSteps.has(s.stepName) || stepIndex > i
+            const isClickable = isDone && !isActive
             return (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -204,7 +215,7 @@ export default function OppPrepAutomationWorkflow() {
                     ${isDone ? "bg-green-500 text-white" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}>
                     {isDone ? "✓" : i + 1}
                   </div>
-                  {isDone ? (
+                  {isClickable ? (
                     <button
                       onClick={() => setStep(s.stepName)}
                       className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium transition-colors"
@@ -355,7 +366,7 @@ export default function OppPrepAutomationWorkflow() {
                     </div>
                   )}
                   <Button
-                    onClick={() => setStep("summary")}
+                    onClick={() => { setCompletedSteps(prev => new Set(prev).add("contract-analyzer")); setStep("summary") }}
                     variant="outline"
                     className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
                   >
