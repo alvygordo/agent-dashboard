@@ -224,8 +224,8 @@ export default function OppPrepAutomationWorkflow() {
       {/* Content area */}
       <div className="relative flex-1 min-h-0 flex flex-col">
 
-        {/* Contract Finder — z-10, visible only on find-contract */}
-        <div className={`absolute inset-0 flex flex-col z-10 ${step === "find-contract" ? "" : "pointer-events-none opacity-0"}`}>
+        {/* Contract Finder — always fully rendered, z-index controls visibility */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "find-contract" ? 20 : 10 }}>
           {step === "find-contract" && (
             <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-2">
@@ -247,8 +247,8 @@ export default function OppPrepAutomationWorkflow() {
           />
         </div>
 
-        {/* NS Agent — z-10, visible only on ns-agent */}
-        <div className={`absolute inset-0 flex flex-col z-10 ${step === "ns-agent" ? "" : "pointer-events-none opacity-0"}`}>
+        {/* NS Agent — always fully rendered, z-index controls visibility */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "ns-agent" ? 20 : 10 }}>
           {step === "ns-agent" && (
             <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-2">
@@ -271,9 +271,9 @@ export default function OppPrepAutomationWorkflow() {
           />
         </div>
 
-        {/* Overlay z-20 — covers iframes on non-iframe steps */}
+        {/* Overlay z-30 — covers both iframes on non-iframe steps */}
         {(step === "opp-input" || step === "contract-analyzer" || step === "summary") && (
-          <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col z-20">
+          <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col" style={{ zIndex: 30 }}>
 
             {/* ── STEP 1: OPP NAME ── */}
             {step === "opp-input" && (
