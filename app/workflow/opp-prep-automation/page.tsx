@@ -390,23 +390,33 @@ export default function OppPrepAutomationWorkflow() {
 
                   <Separator className="bg-gray-100" />
 
-                  <div className="space-y-3">
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-green-800">Contract Finder</p>
-                        {contractData?.contractTitle && (
-                          <p className="text-xs text-green-600 truncate">{contractData.contractTitle}</p>
-                        )}
+                  <div className="space-y-2">
+                    {[
+                      { label: "Contract Finder",        sub: contractData?.contractTitle, live: true },
+                      { label: "NS Agent",               sub: oppName,                     live: true },
+                      { label: "Contract Analyzer",      sub: "GitHub Actions",            live: true, partial: true },
+                      { label: "SF Data Extractor",      live: false },
+                      { label: "Contract Report",        live: false },
+                      { label: "Quote Validator",        live: false },
+                      { label: "QC Agent",               live: false },
+                      { label: "Opp Prep Checklist",     live: false },
+                      { label: "Recommendation & Summary", live: false },
+                    ].map((item, i) => (
+                      <div key={i} className={`rounded-lg p-3 flex items-center gap-2 border ${item.live ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200 opacity-50"}`}>
+                        {item.live
+                          ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
+                          : <div className="w-4 h-4 rounded-full border-2 border-gray-300 shrink-0" />
+                        }
+                        <div className="min-w-0 flex-1">
+                          <p className={`text-sm font-medium ${item.live ? "text-green-800" : "text-gray-500"}`}>
+                            {item.label}
+                            {item.partial && <span className="ml-2 text-xs font-normal text-amber-600">pending setup</span>}
+                            {!item.live && <span className="ml-2 text-xs font-normal">— coming soon</span>}
+                          </p>
+                          {item.sub && <p className="text-xs text-green-600 truncate">{item.sub}</p>}
+                        </div>
                       </div>
-                    </div>
-                    <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center gap-2">
-                      <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
-                      <div>
-                        <p className="text-sm font-medium text-green-800">NS Agent</p>
-                        <p className="text-xs text-green-600">{oppName}</p>
-                      </div>
-                    </div>
+                    ))}
                   </div>
 
                   <Separator className="bg-gray-100" />
