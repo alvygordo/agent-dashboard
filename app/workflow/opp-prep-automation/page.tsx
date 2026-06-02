@@ -156,12 +156,16 @@ export default function OppPrepAutomationWorkflow() {
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
   const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "contract-analyzer": 3, "summary": 4 }[step]
 
-  const steps: { label: string; stepName: Step }[] = [
+  const steps: { label: string; stepName: Step; comingSoon?: boolean }[] = [
     { label: "Enter Opportunity",    stepName: "opp-input" },
     { label: "Find Contract",        stepName: "find-contract" },
     { label: "NS Agent",             stepName: "ns-agent" },
     { label: "Contract Analyzer",    stepName: "contract-analyzer" },
     { label: "Summary",              stepName: "summary" },
+    { label: "SF Data Extractor",    stepName: "summary", comingSoon: true },
+    { label: "Quote Validator",      stepName: "summary", comingSoon: true },
+    { label: "QC Agent",             stepName: "summary", comingSoon: true },
+    { label: "Opp Prep Checklist",   stepName: "summary", comingSoon: true },
   ]
 
   return (
@@ -202,6 +206,19 @@ export default function OppPrepAutomationWorkflow() {
       <div className="border-b border-gray-200 bg-white shrink-0">
         <div className="px-6 py-3 flex items-center gap-4">
           {steps.map((s, i) => {
+            if (s.comingSoon) {
+              return (
+                <div key={i} className="flex items-center gap-3 opacity-40">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold bg-gray-200 text-gray-400">
+                      {i + 1}
+                    </div>
+                    <span className="text-sm text-gray-400 italic">{s.label}</span>
+                  </div>
+                  {i < steps.length - 1 && <ArrowRight className="w-3 h-3 text-gray-200" />}
+                </div>
+              )
+            }
             const isActive    = step === s.stepName
             const isDone      = visitedSteps.has(s.stepName) || stepIndex > i
             const isClickable = isDone && !isActive
