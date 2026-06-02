@@ -394,13 +394,12 @@ export default function OppPrepAutomationWorkflow() {
                     {[
                       { label: "Contract Finder",        sub: contractData?.contractTitle, live: true },
                       { label: "NS Agent",               sub: oppName,                     live: true },
-                      { label: "Contract Analyzer",      sub: "GitHub Actions",            live: true, partial: true },
+                      { label: "Contract Analyzer",      sub: "Includes Contract Report",  live: true, partial: true },
                       { label: "SF Data Extractor",      live: false },
-                      { label: "Contract Report",        live: false },
                       { label: "Quote Validator",        live: false },
                       { label: "QC Agent",               live: false },
                       { label: "Opp Prep Checklist",     live: false },
-                      { label: "Recommendation & Summary", live: false },
+                      { label: "Summary",                live: false },
                     ].map((item, i) => (
                       <div key={i} className={`rounded-lg p-3 flex items-center gap-2 border ${item.live ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200 opacity-50"}`}>
                         {item.live
