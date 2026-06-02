@@ -37,6 +37,7 @@ export default function OppPrepAutomationWorkflow() {
   const [analyzerStatus, setAnalyzerStatus] = useState<"idle" | "running" | "success" | "error">("idle")
   const [analyzerMessage, setAnalyzerMessage] = useState("")
   const nsIframeRef                   = useRef<HTMLIFrameElement>(null)
+  const nsHandoffSent                 = useRef(false)
 
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
@@ -69,11 +70,14 @@ export default function OppPrepAutomationWorkflow() {
     return () => window.removeEventListener("message", handleMessage)
   }, [handleMessage])
 
-  // Send handoff to NS Agent once its iframe is ready
+  // Send handoff to NS Agent once — never re-send on back navigation
   useEffect(() => {
     if (step !== "ns-agent" || !contractData) return
+    if (nsHandoffSent.current) return
     const iframe = nsIframeRef.current
     if (!iframe) return
+
+    nsHandoffSent.current = true
 
     function sendHandoff() {
       iframe!.contentWindow?.postMessage({
@@ -89,9 +93,7 @@ export default function OppPrepAutomationWorkflow() {
       }, "*")
     }
 
-    // Send on load in case iframe hasn't loaded yet
     iframe.addEventListener("load", sendHandoff)
-    // Also send immediately in case iframe is already loaded (back-navigation)
     sendHandoff()
     return () => iframe.removeEventListener("load", sendHandoff)
   }, [step, contractData, oppName])
@@ -141,6 +143,7 @@ export default function OppPrepAutomationWorkflow() {
     setNsData(null)
     setAnalyzerStatus("idle")
     setAnalyzerMessage("")
+    nsHandoffSent.current = false
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
