@@ -351,15 +351,13 @@ export default function OppPrepAutomationWorkflow() {
                       <span>{analyzerMessage}</span>
                     </div>
                   )}
-                  {(analyzerStatus === "success" || analyzerStatus === "idle") && (
-                    <Button
-                      onClick={() => setStep("summary")}
-                      variant="outline"
-                      className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
-                    >
-                      {analyzerStatus === "success" ? "Continue to Summary" : "Skip for now"} <ArrowRight className="w-4 h-4 ml-2" />
-                    </Button>
-                  )}
+                  <Button
+                    onClick={() => setStep("summary")}
+                    variant="outline"
+                    className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
+                  >
+                    {analyzerStatus === "success" ? "Continue to Summary" : "Skip for now"} <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
                 </div>
               </div>
             )}
