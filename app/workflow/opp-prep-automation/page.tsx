@@ -79,6 +79,7 @@ export default function OppPrepAutomationWorkflow() {
       iframe!.contentWindow?.postMessage({
         type:            "dashboard-handoff",
         oppName,
+        oppId:           contractData!.oppId,
         contractUrl:     contractData!.contractUrl,
         contractTitle:   contractData!.contractTitle,
         isPackage:       contractData!.isPackage,
