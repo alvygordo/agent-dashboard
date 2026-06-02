@@ -161,11 +161,11 @@ export default function OppPrepAutomationWorkflow() {
     { label: "Find Contract",        stepName: "find-contract" },
     { label: "NS Agent",             stepName: "ns-agent" },
     { label: "Contract Analyzer",    stepName: "contract-analyzer" },
-    { label: "Summary",              stepName: "summary" },
     { label: "SF Data Extractor",    stepName: "summary", comingSoon: true },
     { label: "Quote Validator",      stepName: "summary", comingSoon: true },
     { label: "QC Agent",             stepName: "summary", comingSoon: true },
-    { label: "Opp Prep Checklist",   stepName: "summary", comingSoon: true },
+    { label: "OP Checklist",         stepName: "summary", comingSoon: true },
+    { label: "Summary",              stepName: "summary" },
   ]
 
   return (
@@ -412,11 +412,11 @@ export default function OppPrepAutomationWorkflow() {
                       { label: "Contract Finder",        sub: contractData?.contractTitle, live: true },
                       { label: "NS Agent",               sub: oppName,                     live: true },
                       { label: "Contract Analyzer",      sub: "Includes Contract Report",  live: true, partial: true },
-                      { label: "SF Data Extractor",      live: false },
-                      { label: "Quote Validator",        live: false },
-                      { label: "QC Agent",               live: false },
-                      { label: "Opp Prep Checklist",     live: false },
-                      { label: "Summary",                live: false },
+                      { label: "SF Data Extractor",  live: false },
+                      { label: "Quote Validator",    live: false },
+                      { label: "QC Agent",           live: false },
+                      { label: "OP Checklist",       live: false },
+                      { label: "Summary",            live: false },
                     ].map((item, i) => (
                       <div key={i} className={`rounded-lg p-3 flex items-center gap-2 border ${item.live ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200 opacity-50"}`}>
                         {item.live
