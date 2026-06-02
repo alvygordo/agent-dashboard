@@ -7,9 +7,9 @@ import { theme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, ArrowLeft, Bot, CheckCircle, AlertCircle } from "lucide-react"
+import { ArrowRight, ArrowLeft, Bot, CheckCircle, AlertCircle, Play, Loader2, CheckCircle2, XCircle } from "lucide-react"
 
-type Step = "opp-input" | "find-contract" | "ns-agent" | "summary"
+type Step = "opp-input" | "find-contract" | "ns-agent" | "contract-analyzer" | "summary"
 
 type ContractData = {
   contractUrl: string
@@ -20,6 +20,7 @@ type ContractData = {
   msaUrl: string
   msaTitle: string
   additionalDocs: { url: string; title: string }[]
+  oppId: string
 }
 
 type NSData = {
@@ -33,6 +34,8 @@ export default function OppPrepAutomationWorkflow() {
   const [oppNameError, setOppNameError] = useState("")
   const [contractData, setContractData] = useState<ContractData | null>(null)
   const [nsData, setNsData]           = useState<NSData | null>(null)
+  const [analyzerStatus, setAnalyzerStatus] = useState<"idle" | "running" | "success" | "error">("idle")
+  const [analyzerMessage, setAnalyzerMessage] = useState("")
   const nsIframeRef                   = useRef<HTMLIFrameElement>(null)
 
   const contractFinder = getAgent("contract-finder")!
@@ -49,6 +52,7 @@ export default function OppPrepAutomationWorkflow() {
         msaUrl:            event.data.msaUrl ?? "",
         msaTitle:          event.data.msaTitle ?? "",
         additionalDocs:    Array.isArray(event.data.additionalDocs) ? event.data.additionalDocs : [],
+        oppId:             event.data.oppId ?? "",
       }
       setContractData(data)
       setStep("ns-agent")
@@ -56,7 +60,7 @@ export default function OppPrepAutomationWorkflow() {
 
     if (event.data?.type === "ns-agent-result") {
       setNsData({ oppName: event.data.oppName, nsData: event.data.nsData })
-      setStep("summary")
+      setStep("contract-analyzer")
     }
   }, [])
 
@@ -100,21 +104,53 @@ export default function OppPrepAutomationWorkflow() {
     setStep("find-contract")
   }
 
+  async function runContractAnalyzer() {
+    const oppId = contractData?.oppId
+    if (!oppId) {
+      setAnalyzerMessage("No Opportunity ID found — cannot run analysis.")
+      setAnalyzerStatus("error")
+      return
+    }
+    setAnalyzerStatus("running")
+    setAnalyzerMessage("")
+    try {
+      const res = await fetch("/api/run-contract-analyzer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ oppId }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setAnalyzerStatus("success")
+        setAnalyzerMessage("Analysis started. Check Salesforce for results in ~5 minutes.")
+      } else {
+        setAnalyzerStatus("error")
+        setAnalyzerMessage(data.error ?? "Failed to trigger analysis.")
+      }
+    } catch {
+      setAnalyzerStatus("error")
+      setAnalyzerMessage("Network error — please try again.")
+    }
+  }
+
   function resetWorkflow() {
     setStep("opp-input")
     setOppName("")
     setContractData(null)
     setNsData(null)
+    setAnalyzerStatus("idle")
+    setAnalyzerMessage("")
   }
 
   const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
-  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "summary": 3 }[step]
+  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "contract-analyzer": 3, "summary": 4 }[step]
 
   const steps: { label: string; stepName: Step }[] = [
-    { label: "Enter Opportunity", stepName: "opp-input" },
-    { label: "Find Contract",     stepName: "find-contract" },
-    { label: "NS Agent",          stepName: "ns-agent" },
-    { label: "Summary",           stepName: "summary" },
+    { label: "Enter Opportunity",    stepName: "opp-input" },
+    { label: "Find Contract",        stepName: "find-contract" },
+    { label: "NS Agent",             stepName: "ns-agent" },
+    { label: "Contract Analyzer",    stepName: "contract-analyzer" },
+    { label: "Summary",              stepName: "summary" },
   ]
 
   return (
@@ -234,8 +270,8 @@ export default function OppPrepAutomationWorkflow() {
           />
         </div>
 
-        {/* Overlay for steps 1 and 4 */}
-        {(step === "opp-input" || step === "summary") && (
+        {/* Overlay for steps 1, 4 and 5 */}
+        {(step === "opp-input" || step === "contract-analyzer" || step === "summary") && (
           <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col">
 
             {/* ── STEP 1: OPP NAME ── */}
@@ -273,12 +309,66 @@ export default function OppPrepAutomationWorkflow() {
               </div>
             )}
 
-            {/* ── STEP 4: SUMMARY ── */}
+            {/* ── STEP 4: CONTRACT ANALYZER ── */}
+            {step === "contract-analyzer" && (
+              <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
+                <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
+                  <div>
+                    <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of 5</Badge>
+                    <h2 className="text-xl font-bold text-gray-900">Run Contract Analyzer</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Analyzes contract PDFs, generates a Contract Report, and updates Salesforce fields.
+                    </p>
+                  </div>
+                  <Separator className="bg-gray-100" />
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-400 uppercase tracking-widest font-medium">Opportunity ID</p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3 text-sm text-gray-900 font-mono">
+                      {contractData?.oppId || "—"}
+                    </div>
+                  </div>
+                  <Button
+                    onClick={runContractAnalyzer}
+                    disabled={analyzerStatus === "running"}
+                    className={`w-full cursor-pointer ${theme.btnPrimary}`}
+                  >
+                    {analyzerStatus === "running" ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Running Analysis...</>
+                    ) : (
+                      <><Play className="w-4 h-4 mr-2" /> Run Analysis</>
+                    )}
+                  </Button>
+                  {analyzerStatus === "success" && (
+                    <div className="flex items-start gap-2 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-4 py-3">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>{analyzerMessage}</span>
+                    </div>
+                  )}
+                  {analyzerStatus === "error" && (
+                    <div className="flex items-start gap-2 text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+                      <XCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>{analyzerMessage}</span>
+                    </div>
+                  )}
+                  {(analyzerStatus === "success" || analyzerStatus === "idle") && (
+                    <Button
+                      onClick={() => setStep("summary")}
+                      variant="outline"
+                      className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#009688] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}
+                    >
+                      {analyzerStatus === "success" ? "Continue to Summary" : "Skip for now"} <ArrowRight className="w-4 h-4 ml-2" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* ── STEP 5: SUMMARY ── */}
             {step === "summary" && (
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
                 <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
                   <div>
-                    <Badge className="bg-green-100 text-green-700 border border-green-300 mb-3">Step 4 of 4</Badge>
+                    <Badge className="bg-green-100 text-green-700 border border-green-300 mb-3">Step 5 of 5</Badge>
                     <div className="flex items-center gap-2 mb-1">
                       <CheckCircle className="w-5 h-5 text-green-500" />
                       <h2 className="text-xl font-bold text-gray-900">Data Collected</h2>
