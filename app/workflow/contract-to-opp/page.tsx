@@ -26,6 +26,7 @@ export default function ContractToOppWorkflow() {
   const [copiedOpp, setCopiedOpp]             = useState(false)
   const [copiedContract, setCopiedContract]   = useState(false)
   const [copiedBase, setCopiedBase]           = useState(false)
+  const [visitedSteps, setVisitedSteps]       = useState<Set<Step>>(new Set())
   const [embedToken, setEmbedToken]           = useState<{ email: string; token: string } | null>(null)
 
   const contractFinder = getAgent("contract-finder")!
@@ -59,6 +60,11 @@ export default function ContractToOppWorkflow() {
     return () => window.removeEventListener("message", handleMessage)
   }, [handleMessage])
 
+  // Auto-mark every step as visited when it becomes active
+  useEffect(() => {
+    setVisitedSteps(prev => new Set(prev).add(step))
+  }, [step])
+
   function handleOppNameSubmit() {
     if (!oppName.trim()) {
       setOppNameError("Please enter the opportunity name before continuing.")
@@ -86,6 +92,7 @@ export default function ContractToOppWorkflow() {
     setMsaUrl("")
     setMsaTitle("")
     setAdditionalDocs([])
+    setVisitedSteps(new Set())
   }
 
   const contractFinderUrl = embedToken
@@ -147,8 +154,9 @@ export default function ContractToOppWorkflow() {
             { label: "Opp Prep AI",       stepName: "handoff" },
             { label: "Contract Report Gem", stepName: "gem" },
           ] as { label: string; stepName: Step }[]).map((s, i) => {
-            const isActive = stepIndex === i
-            const isDone   = stepIndex > i
+            const isActive    = step === s.stepName
+            const isDone      = visitedSteps.has(s.stepName) || stepIndex > i
+            const isClickable = isDone && !isActive
             return (
               <div key={i} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
@@ -156,7 +164,7 @@ export default function ContractToOppWorkflow() {
                     ${isDone ? "bg-green-500 text-white" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}>
                     {isDone ? "✓" : i + 1}
                   </div>
-                  {isDone ? (
+                  {isClickable ? (
                     <button
                       onClick={() => setStep(s.stepName)}
                       className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium transition-colors"
