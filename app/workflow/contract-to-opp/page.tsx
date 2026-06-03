@@ -26,9 +26,17 @@ export default function ContractToOppWorkflow() {
   const [copiedOpp, setCopiedOpp]             = useState(false)
   const [copiedContract, setCopiedContract]   = useState(false)
   const [copiedBase, setCopiedBase]           = useState(false)
+  const [embedToken, setEmbedToken]           = useState<{ email: string; token: string } | null>(null)
 
   const contractFinder = getAgent("contract-finder")!
   const oppPrep        = getAgent("opp-prep-ai")!
+
+  useEffect(() => {
+    fetch('/api/embed-token')
+      .then(r => r.json())
+      .then(d => { if (d.token) setEmbedToken(d) })
+      .catch(() => {})
+  }, [])
 
   // Listen for the contract result sent from the embedded Contract Finder.
   // Forwards the full payload to the next agent so swapping agents requires no changes here.
@@ -80,7 +88,9 @@ export default function ContractToOppWorkflow() {
     setAdditionalDocs([])
   }
 
-  const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
+  const contractFinderUrl = embedToken
+    ? `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
+    : `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
 
   // Build next-agent URL — always passes contract; adds baseContract when it's a package.
   // No hardcoded Opp Prep AI logic: just forward whatever Contract Finder sent.

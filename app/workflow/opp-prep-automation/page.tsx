@@ -39,9 +39,17 @@ export default function OppPrepAutomationWorkflow() {
   const [visitedSteps, setVisitedSteps] = useState<Set<Step>>(new Set())
   const nsIframeRef                   = useRef<HTMLIFrameElement>(null)
   const nsHandoffSent                 = useRef(false)
+  const [embedToken, setEmbedToken]   = useState<{ email: string; token: string } | null>(null)
 
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
+
+  useEffect(() => {
+    fetch('/api/embed-token')
+      .then(r => r.json())
+      .then(d => { if (d.token) setEmbedToken(d) })
+      .catch(() => {})
+  }, [])
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "contract-finder-result") {
@@ -153,7 +161,9 @@ export default function OppPrepAutomationWorkflow() {
     nsHandoffSent.current = false
   }
 
-  const contractFinderUrl = `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
+  const contractFinderUrl = embedToken
+    ? `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
+    : `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
   const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "contract-analyzer": 3, "summary": 4 }[step]
 
   const steps: { label: string; stepName: Step; comingSoon?: boolean }[] = [
