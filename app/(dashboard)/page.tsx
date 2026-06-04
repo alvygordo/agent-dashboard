@@ -102,11 +102,11 @@ export default function Home() {
         </div>
       </section>
 
-      {/* GPTs & Gems */}
+      {/* Apps */}
       <section>
         <div className="flex items-center gap-2 mb-5">
           <Sparkles className={`w-4 h-4 ${theme.accent}`} />
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">GPTs &amp; Gems</h2>
+          <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">Apps</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {tools.map((tool) => (
