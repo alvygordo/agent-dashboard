@@ -197,8 +197,8 @@ export default function OppPrepAutomationWorkflow() {
     ? `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
     : `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
   const sfAgentUrl = embedToken
-    ? `${sfAgent.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
-    : `${sfAgent.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
+    ? `${sfAgent.url}?source=agent-dashboard&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
+    : `${sfAgent.url}?source=agent-dashboard`
   const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "sf-agent": 3, "contract-analyzer": 4, "summary": 5 }[step]
 
   const steps: { label: string; stepName: Step; comingSoon?: boolean }[] = [
