@@ -59,6 +59,13 @@ export const agents: Agent[] = [
     status: "active",
   },
   {
+    id: "sf-agent",
+    name: "SF Agent",
+    description: "Read-only Salesforce lookup: search an Opportunity by name and view its renewal/subscription fields.",
+    url: process.env.NEXT_PUBLIC_SF_AGENT_URL ?? "https://sandbox-sf-agent.vercel.app/",
+    status: "active",
+  },
+  {
     id: "contract-analyzer",
     name: "Contract Analyzer Agent",
     description: "Analyzes contract PDFs for a Salesforce opportunity, generates a Contract Report, updates 8 SF fields, and writes a journal summary.",

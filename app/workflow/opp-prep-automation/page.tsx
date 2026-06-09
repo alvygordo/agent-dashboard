@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { ArrowRight, ArrowLeft, Bot, CheckCircle, AlertCircle, Play, Loader2, CheckCircle2, XCircle } from "lucide-react"
 
-type Step = "opp-input" | "find-contract" | "ns-agent" | "contract-analyzer" | "summary"
+type Step = "opp-input" | "find-contract" | "ns-agent" | "sf-agent" | "contract-analyzer" | "summary"
 
 type ContractData = {
   contractUrl: string
@@ -34,15 +34,19 @@ export default function OppPrepAutomationWorkflow() {
   const [oppNameError, setOppNameError] = useState("")
   const [contractData, setContractData] = useState<ContractData | null>(null)
   const [nsData, setNsData]           = useState<NSData | null>(null)
+  const [sfData, setSfData]           = useState<unknown[] | null>(null)
   const [analyzerStatus, setAnalyzerStatus] = useState<"idle" | "running" | "success" | "error">("idle")
   const [analyzerMessage, setAnalyzerMessage] = useState("")
   const [visitedSteps, setVisitedSteps] = useState<Set<Step>>(new Set())
   const nsIframeRef                   = useRef<HTMLIFrameElement>(null)
+  const sfIframeRef                   = useRef<HTMLIFrameElement>(null)
   const nsHandoffSent                 = useRef(false)
+  const sfHandoffSent                 = useRef(false)
   const [embedToken, setEmbedToken]   = useState<{ email: string; token: string } | null>(null)
 
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
+  const sfAgent        = getAgent("sf-agent")!
 
   useEffect(() => {
     fetch('/api/embed-token')
@@ -70,6 +74,11 @@ export default function OppPrepAutomationWorkflow() {
 
     if (event.data?.type === "ns-agent-result") {
       setNsData({ oppName: event.data.oppName, nsData: event.data.nsData })
+      setStep("sf-agent")
+    }
+
+    if (event.data?.type === "sf-agent-result") {
+      setSfData(Array.isArray(event.data.opportunities) ? event.data.opportunities : [])
       setStep("contract-analyzer")
     }
   }, [])
@@ -111,6 +120,27 @@ export default function OppPrepAutomationWorkflow() {
     sendHandoff()
     return () => iframe.removeEventListener("load", sendHandoff)
   }, [step, contractData, oppName])
+
+  // Send handoff to SF Agent once — never re-send on back navigation
+  useEffect(() => {
+    if (step !== "sf-agent") return
+    if (sfHandoffSent.current) return
+    const iframe = sfIframeRef.current
+    if (!iframe) return
+
+    sfHandoffSent.current = true
+
+    function sendHandoff() {
+      iframe!.contentWindow?.postMessage({
+        type:    "dashboard-handoff",
+        oppName,
+      }, "*")
+    }
+
+    iframe.addEventListener("load", sendHandoff)
+    sendHandoff()
+    return () => iframe.removeEventListener("load", sendHandoff)
+  }, [step, oppName])
 
   function handleOppNameSubmit() {
     if (!oppName.trim()) {
@@ -157,25 +187,29 @@ export default function OppPrepAutomationWorkflow() {
     setNsData(null)
     setAnalyzerStatus("idle")
     setAnalyzerMessage("")
+    setSfData(null)
     setVisitedSteps(new Set())
     nsHandoffSent.current = false
+    sfHandoffSent.current = false
   }
 
   const contractFinderUrl = embedToken
     ? `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
     : `${contractFinder.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
-  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "contract-analyzer": 3, "summary": 4 }[step]
+  const sfAgentUrl = embedToken
+    ? `${sfAgent.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}&u=${encodeURIComponent(embedToken.email)}&t=${embedToken.token}`
+    : `${sfAgent.url}?source=agent-dashboard&opp=${encodeURIComponent(oppName)}`
+  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "sf-agent": 3, "contract-analyzer": 4, "summary": 5 }[step]
 
   const steps: { label: string; stepName: Step; comingSoon?: boolean }[] = [
-    { label: "Enter Opportunity",    stepName: "opp-input" },
-    { label: "Find Contract",        stepName: "find-contract" },
-    { label: "NS Agent",             stepName: "ns-agent" },
-    { label: "Contract Analyzer",    stepName: "contract-analyzer" },
-    { label: "SF Data Extractor",    stepName: "summary", comingSoon: true },
-    { label: "Quote Validator",      stepName: "summary", comingSoon: true },
-    { label: "QC Agent",             stepName: "summary", comingSoon: true },
-    { label: "OP Checklist",         stepName: "summary", comingSoon: true },
-    { label: "Summary",              stepName: "summary" },
+    { label: "Enter Opportunity",  stepName: "opp-input" },
+    { label: "Find Contract",      stepName: "find-contract" },
+    { label: "NS Agent",           stepName: "ns-agent" },
+    { label: "SF Agent",           stepName: "sf-agent" },
+    { label: "Contract Analyzer",  stepName: "contract-analyzer" },
+    { label: "QC Agent",           stepName: "summary", comingSoon: true },
+    { label: "OP Checklist",       stepName: "summary", comingSoon: true },
+    { label: "Summary",            stepName: "summary" },
   ]
 
   return (
@@ -309,6 +343,30 @@ export default function OppPrepAutomationWorkflow() {
           />
         </div>
 
+        {/* SF Agent — always fully rendered, z-index controls visibility */}
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "sf-agent" ? 20 : 10 }}>
+          {step === "sf-agent" && (
+            <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
+              <div className="flex items-center gap-2">
+                <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
+                <p className={`text-sm ${theme.instructionText}`}>
+                  <strong>SF Agent is looking up Salesforce data.</strong> When results appear, click <strong>✓ Use this data</strong>.
+                </p>
+              </div>
+              <Button onClick={() => setStep("ns-agent")} variant="ghost"
+                className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}>
+                <ArrowLeft className="w-3 h-3 mr-1" /> Back
+              </Button>
+            </div>
+          )}
+          <iframe
+            ref={sfIframeRef}
+            src={sfAgentUrl}
+            className="flex-1 w-full border-0"
+            title="SF Agent"
+          />
+        </div>
+
         {/* Overlay z-30 — covers both iframes on non-iframe steps */}
         {(step === "opp-input" || step === "contract-analyzer" || step === "summary") && (
           <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col" style={{ zIndex: 30 }}>
@@ -353,7 +411,7 @@ export default function OppPrepAutomationWorkflow() {
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
                 <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
                   <div>
-                    <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of 5</Badge>
+                    <Badge className={`${theme.stepBadge} mb-3`}>Step 5 of 6</Badge>
                     <h2 className="text-xl font-bold text-gray-900">Run Contract Analyzer</h2>
                     <p className="text-sm text-gray-500 mt-1">
                       Analyzes contract PDFs, generates a Contract Report, and updates Salesforce fields.
@@ -405,7 +463,7 @@ export default function OppPrepAutomationWorkflow() {
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
                 <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
                   <div>
-                    <Badge className="bg-green-100 text-green-700 border border-green-300 mb-3">Step 5 of 5</Badge>
+                    <Badge className="bg-green-100 text-green-700 border border-green-300 mb-3">Step 6 of 6</Badge>
                     <div className="flex items-center gap-2 mb-1">
                       <CheckCircle className="w-5 h-5 text-green-500" />
                       <h2 className="text-xl font-bold text-gray-900">Data Collected</h2>
@@ -419,11 +477,10 @@ export default function OppPrepAutomationWorkflow() {
 
                   <div className="space-y-2">
                     {[
-                      { label: "Contract Finder",        sub: contractData?.contractTitle, live: true },
-                      { label: "NS Agent",               sub: oppName,                     live: true },
-                      { label: "Contract Analyzer",      sub: "Includes Contract Report",  live: true, partial: true },
-                      { label: "SF Data Extractor",  live: false },
-                      { label: "Quote Validator",    live: false },
+                      { label: "Contract Finder",    sub: contractData?.contractTitle, live: true },
+                      { label: "NS Agent",           sub: oppName,                     live: true },
+                      { label: "SF Agent",           sub: oppName,                     live: true },
+                      { label: "Contract Analyzer",  sub: "Includes Contract Report",  live: true, partial: true },
                       { label: "QC Agent",           live: false },
                       { label: "OP Checklist",       live: false },
                       { label: "Summary",            live: false },
