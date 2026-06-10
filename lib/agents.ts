@@ -63,7 +63,10 @@ export const agents: Agent[] = [
     id: "sf-agent",
     name: "SF Agent",
     description: "Read-only Salesforce lookup: search an Opportunity by name and view its renewal/subscription fields.",
-    url: process.env.NEXT_PUBLIC_SF_AGENT_URL ?? "https://sandbox-sf-agent.vercel.app/",
+    url: process.env.NEXT_PUBLIC_SF_AGENT_URL ||
+         (process.env.NEXT_PUBLIC_ENV === "production"
+           ? "https://so-sf-agent.vercel.app/"
+           : "https://sandbox-sf-agent.vercel.app/"),
     status: "active",
   },
   {
