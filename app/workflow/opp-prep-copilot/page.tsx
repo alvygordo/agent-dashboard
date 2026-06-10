@@ -278,7 +278,7 @@ export default function OppPrepCopilotWorkflow() {
               </div>
             </div>
           )}
-          <iframe ref={nsIframeRef} src={nsAgent.url} className="flex-1 w-full border-0" title="NS Agent" />
+          <iframe ref={nsIframeRef} src={`${nsAgent.url}?source=agent-dashboard`} className="flex-1 w-full border-0" title="NS Agent" />
         </div>
 
         {/* SF Agent iframe */}

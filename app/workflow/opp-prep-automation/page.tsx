@@ -337,7 +337,7 @@ export default function OppPrepAutomationWorkflow() {
           )}
           <iframe
             ref={nsIframeRef}
-            src={nsAgent.url}
+            src={`${nsAgent.url}?source=agent-dashboard`}
             className="flex-1 w-full border-0"
             title="NS Agent"
           />
