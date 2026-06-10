@@ -108,7 +108,6 @@ export const workflows: Workflow[] = [
     name: "Opp Prep Co-Pilot",
     description: "Automated pipeline — enter the opp, select the contract, and let the agents handle the rest through to Opp Prep AI.",
     status: "active",
-    sandboxOnly: true,
     steps: [
       { agentId: "contract-finder", label: "Find Contract",  requiresConfirmation: true },
       { agentId: "ns-agent",        label: "NS Agent",        requiresConfirmation: false },
