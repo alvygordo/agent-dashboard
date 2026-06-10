@@ -186,9 +186,11 @@ export default function OppPrepCopilotWorkflow() {
     <main className="min-h-screen bg-gray-50 flex flex-col relative">
 
       {/* Sandbox banner */}
-      <div className="bg-purple-700 text-white text-center py-2 px-4 text-sm font-medium tracking-wide shrink-0">
-        ⚠️ SANDBOX ENVIRONMENT — For testing purposes only
-      </div>
+      {!theme.isProd && (
+        <div className="bg-purple-700 text-white text-center py-2 px-4 text-sm font-medium tracking-wide shrink-0">
+          ⚠️ SANDBOX ENVIRONMENT — For testing purposes only
+        </div>
+      )}
 
       {/* Header */}
       <div className={`${theme.headerBg} shrink-0`}>
