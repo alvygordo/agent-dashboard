@@ -29,7 +29,7 @@ export default function Home() {
           <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-500">Workflows</h2>
         </div>
         <div className="grid gap-4">
-          {workflows.map((wf) => (
+          {workflows.filter(wf => !wf.sandboxOnly || !theme.isProd).map((wf) => (
             <Card key={wf.id} className={`bg-white border-gray-200 transition-all ${theme.cardHover}`}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">

@@ -17,6 +17,7 @@ export type Workflow = {
   description: string
   steps: WorkflowStep[]
   status: "active" | "coming-soon"
+  sandboxOnly?: boolean
 }
 
 export type WorkflowStep = {
@@ -100,6 +101,19 @@ export const workflows: Workflow[] = [
         label: "Step 3: Contract Report Gem",
         requiresConfirmation: false,
       },
+    ],
+  },
+  {
+    id: "opp-prep-copilot",
+    name: "Opp Prep Co-Pilot",
+    description: "Automated pipeline — enter the opp, select the contract, and let the agents handle the rest through to Opp Prep AI.",
+    status: "active",
+    sandboxOnly: true,
+    steps: [
+      { agentId: "contract-finder", label: "Find Contract",  requiresConfirmation: true },
+      { agentId: "ns-agent",        label: "NS Agent",        requiresConfirmation: false },
+      { agentId: "sf-agent",        label: "SF Agent",        requiresConfirmation: false },
+      { agentId: "opp-prep-ai",     label: "Opp Prep AI",     requiresConfirmation: false },
     ],
   },
   {
