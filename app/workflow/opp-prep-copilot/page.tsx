@@ -21,6 +21,7 @@ type ContractData = {
   msaTitle: string
   additionalDocs: { url: string; title: string }[]
   oppId: string
+  oppUrl: string
 }
 
 type NSData = {
@@ -68,6 +69,7 @@ export default function OppPrepCopilotWorkflow() {
         msaTitle:          event.data.msaTitle ?? "",
         additionalDocs:    Array.isArray(event.data.additionalDocs) ? event.data.additionalDocs : [],
         oppId:             event.data.oppId ?? "",
+        oppUrl:            event.data.oppUrl ?? "",
       }
       setContractData(data)
       setStep("ns-agent")
@@ -376,7 +378,14 @@ export default function OppPrepCopilotWorkflow() {
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 text-sm">
                     <div>
                       <p className="font-medium text-gray-500 uppercase text-xs tracking-wide mb-1">Opportunity</p>
-                      <p className="text-gray-800 font-medium">{oppName}</p>
+                      {contractData?.oppUrl ? (
+                        <a href={contractData.oppUrl} target="_blank" rel="noopener noreferrer"
+                          className="flex items-center gap-1 text-blue-600 hover:text-blue-800 hover:underline font-medium">
+                          {oppName} <ExternalLink className="w-3 h-3 shrink-0" />
+                        </a>
+                      ) : (
+                        <p className="text-gray-800 font-medium">{oppName}</p>
+                      )}
                     </div>
 
                     {(contractData?.contractUrl || contractData?.baseContractUrl || contractData?.msaUrl || (contractData?.additionalDocs?.length ?? 0) > 0) && (
