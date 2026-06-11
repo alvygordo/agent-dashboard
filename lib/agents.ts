@@ -49,7 +49,7 @@ export const agents: Agent[] = [
     id: "ns-agent",
     name: "NS Agent",
     description: "Extract subscription, customer, and billing data from NetSuite.",
-    url: process.env.NEXT_PUBLIC_NS_AGENT_URL ?? "http://localhost:3001/",
+    url: process.env.NEXT_PUBLIC_NS_AGENT_URL || "https://ns-agent.vercel.app/",
     status: "active",
   },
   {
