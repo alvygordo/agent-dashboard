@@ -7,9 +7,9 @@ import { theme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { ArrowRight, ArrowLeft, Bot, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
+import { ArrowRight, ArrowLeft, Bot, CheckCircle, AlertCircle, Loader2, ExternalLink } from "lucide-react"
 
-type Step = "opp-input" | "find-contract" | "ns-agent" | "sf-agent" | "opp-prep-ai" | "done"
+type Step = "opp-input" | "find-contract" | "ns-agent" | "sf-agent" | "opp-prep-ai" | "contract-report" | "done"
 
 type ContractData = {
   contractUrl: string
@@ -27,6 +27,8 @@ type NSData = {
   oppName: string
   nsData: unknown
 }
+
+const GEM_URL = "https://gemini.google.com/gem/ae20cb53e35f"
 
 export default function OppPrepCopilotWorkflow() {
   const [step, setStep]             = useState<Step>("opp-input")
@@ -171,15 +173,16 @@ export default function OppPrepCopilotWorkflow() {
     return `${oppPrepAI.url}?${params.toString()}`
   })()
 
-  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "sf-agent": 3, "opp-prep-ai": 4, "done": 5 }[step]
+  const stepIndex = { "opp-input": 0, "find-contract": 1, "ns-agent": 2, "sf-agent": 3, "opp-prep-ai": 4, "contract-report": 5, "done": 6 }[step]
 
   const steps: { label: string; stepName: Step }[] = [
-    { label: "Enter Opportunity", stepName: "opp-input" },
-    { label: "Find Contract",     stepName: "find-contract" },
-    { label: "NS Agent",          stepName: "ns-agent" },
-    { label: "SF Agent",          stepName: "sf-agent" },
-    { label: "Opp Prep AI",       stepName: "opp-prep-ai" },
-    { label: "Done",              stepName: "done" },
+    { label: "Enter Opportunity",  stepName: "opp-input" },
+    { label: "Find Contract",      stepName: "find-contract" },
+    { label: "Extract NS Data",    stepName: "ns-agent" },
+    { label: "Extract SF Data",    stepName: "sf-agent" },
+    { label: "Opp Prep AI",        stepName: "opp-prep-ai" },
+    { label: "Contract Report",    stepName: "contract-report" },
+    { label: "Done",               stepName: "done" },
   ]
 
   return (
@@ -275,7 +278,7 @@ export default function OppPrepCopilotWorkflow() {
               <div className="flex items-center gap-2">
                 <Loader2 className={`w-4 h-4 ${theme.instructionIcon} shrink-0 animate-spin`} />
                 <p className={`text-sm ${theme.instructionText}`}>
-                  <strong>NS Agent is fetching NetSuite data.</strong> This will advance automatically when complete.
+                  <strong>Extracting NetSuite data.</strong> This will advance automatically when complete.
                 </p>
               </div>
             </div>
@@ -290,7 +293,7 @@ export default function OppPrepCopilotWorkflow() {
               <div className="flex items-center gap-2">
                 <Loader2 className={`w-4 h-4 ${theme.instructionIcon} shrink-0 animate-spin`} />
                 <p className={`text-sm ${theme.instructionText}`}>
-                  <strong>SF Agent is fetching Salesforce data.</strong> This will advance automatically when complete.
+                  <strong>Extracting Salesforce data.</strong> This will advance automatically when complete.
                 </p>
               </div>
             </div>
@@ -299,19 +302,19 @@ export default function OppPrepCopilotWorkflow() {
         </div>
 
         {/* Opp Prep AI iframe — mount once reached, stay mounted to preserve state on back navigation */}
-        {(visitedSteps.has("opp-prep-ai") || step === "opp-prep-ai" || step === "done") && (
+        {(visitedSteps.has("opp-prep-ai") || step === "opp-prep-ai" || step === "contract-report" || step === "done") && (
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "opp-prep-ai" ? 20 : 5 }}>
           {step === "opp-prep-ai" && (
             <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-2">
                 <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
                 <p className={`text-sm ${theme.instructionText}`}>
-                  <strong>Review the analysis below.</strong> When all data is verified and ready, click <strong>Confirm & Done</strong>.
+                  <strong>Review the analysis below.</strong> When satisfied, click <strong>Proceed to Contract Report</strong>.
                 </p>
               </div>
-              <Button onClick={() => setStep("done")} variant="ghost"
+              <Button onClick={() => setStep("contract-report")} variant="ghost"
                 className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}>
-                Confirm & Done <ArrowRight className="w-3 h-3 ml-1" />
+                Proceed to Contract Report <ArrowRight className="w-3 h-3 ml-1" />
               </Button>
             </div>
           )}
@@ -320,7 +323,7 @@ export default function OppPrepCopilotWorkflow() {
         )}
 
         {/* Overlay for non-iframe steps */}
-        {(step === "opp-input" || step === "done") && (
+        {(step === "opp-input" || step === "contract-report" || step === "done") && (
           <div className="absolute inset-0 bg-gray-50 overflow-auto flex flex-col" style={{ zIndex: 30 }}>
 
             {/* Step 1: Opp Name */}
@@ -328,10 +331,10 @@ export default function OppPrepCopilotWorkflow() {
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
                 <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
                   <div>
-                    <Badge className={`${theme.stepBadge} mb-3`}>Step 1 of 6</Badge>
+                    <Badge className={`${theme.stepBadge} mb-3`}>Step 1 of 7</Badge>
                     <h2 className="text-xl font-bold text-gray-900">Enter the Opportunity Name</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      After selecting the contract, the pipeline will run automatically through NS Agent, SF Agent, and Opp Prep AI.
+                      After selecting the contract, the pipeline will run automatically through NS data, SF data, and Opp Prep AI.
                     </p>
                   </div>
                   <div className="space-y-2">
@@ -358,6 +361,48 @@ export default function OppPrepCopilotWorkflow() {
               </div>
             )}
 
+            {/* Contract Report step */}
+            {step === "contract-report" && (
+              <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
+                <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
+                  <div>
+                    <Badge className={`${theme.stepBadge} mb-3`}>Step 6 of 7</Badge>
+                    <h2 className="text-xl font-bold text-gray-900">Contract Report</h2>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Open the Contract Report Gem to generate the contract report. Come back and mark complete when done.
+                    </p>
+                  </div>
+
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1 text-sm">
+                    <p className="font-medium text-gray-700">Opportunity</p>
+                    <p className="text-gray-600">{oppName}</p>
+                    {contractData?.contractTitle && (
+                      <>
+                        <p className="font-medium text-gray-700 pt-2">Contract</p>
+                        <p className="text-gray-600">{contractData.contractTitle}</p>
+                      </>
+                    )}
+                  </div>
+
+                  <a href={GEM_URL} target="_blank" rel="noopener noreferrer">
+                    <Button className={`w-full cursor-pointer ${theme.btnPrimary}`}>
+                      Open Contract Report Gem <ExternalLink className="w-4 h-4 ml-2" />
+                    </Button>
+                  </a>
+
+                  <Button onClick={() => setStep("done")} variant="outline"
+                    className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#00b4a2] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}>
+                    <CheckCircle className="w-4 h-4 mr-2" /> Mark Complete
+                  </Button>
+
+                  <button onClick={() => setStep("opp-prep-ai")}
+                    className="w-full text-sm text-gray-400 hover:text-gray-600 cursor-pointer text-center transition-colors">
+                    ← Back to Opp Prep AI
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Done */}
             {step === "done" && (
               <div className="flex flex-col items-center justify-center flex-1 px-6 py-12">
@@ -377,10 +422,11 @@ export default function OppPrepCopilotWorkflow() {
 
                   <div className="space-y-2">
                     {[
-                      { label: "Contract Finder", sub: contractData?.contractTitle },
-                      { label: "NS Agent",        sub: oppName },
-                      { label: "SF Agent",        sub: oppName },
-                      { label: "Opp Prep AI",     sub: "Analysis complete — data posted to SF" },
+                      { label: "Contract Finder",  sub: contractData?.contractTitle },
+                      { label: "Extract NS Data",   sub: oppName },
+                      { label: "Extract SF Data",   sub: oppName },
+                      { label: "Opp Prep AI",       sub: "Analysis complete" },
+                      { label: "Contract Report",   sub: "Report generated via Gem" },
                     ].map((item, i) => (
                       <div key={i} className="rounded-lg p-3 flex items-center gap-2 border bg-green-50 border-green-200">
                         <CheckCircle className="w-4 h-4 text-green-500 shrink-0" />
@@ -395,7 +441,7 @@ export default function OppPrepCopilotWorkflow() {
                   <Separator className="bg-gray-100" />
 
                   <Button onClick={resetWorkflow} variant="outline"
-                    className="w-full cursor-pointer border-purple-300 text-purple-700 hover:bg-purple-50">
+                    className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#00b4a2] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}>
                     Run Another Opportunity
                   </Button>
                   <Link href="/">

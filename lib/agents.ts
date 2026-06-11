@@ -42,7 +42,10 @@ export const agents: Agent[] = [
     id: "opp-prep-ai",
     name: "Opp Prep AI",
     description: "Prepare your opportunity with AI-powered insights and analysis.",
-    url: process.env.NEXT_PUBLIC_OPP_PREP_URL ?? "https://sandbox-opp-prep.vercel.app/",
+    url: process.env.NEXT_PUBLIC_OPP_PREP_URL ||
+         (process.env.NEXT_PUBLIC_ENV === "production"
+           ? "https://gpt-opp-prep.vercel.app/"
+           : "https://sandbox-opp-prep.vercel.app/"),
     status: "active",
   },
   {
@@ -88,10 +91,11 @@ export const workflows: Workflow[] = [
     description: "Automated pipeline — enter the opp, select the contract, and let the agents handle the rest through to Opp Prep AI.",
     status: "active",
     steps: [
-      { agentId: "contract-finder", label: "Find Contract",  requiresConfirmation: true },
-      { agentId: "ns-agent",        label: "NS Agent",        requiresConfirmation: false },
-      { agentId: "sf-agent",        label: "SF Agent",        requiresConfirmation: false },
-      { agentId: "opp-prep-ai",     label: "Opp Prep AI",     requiresConfirmation: false },
+      { agentId: "contract-finder", label: "Find Contract",     requiresConfirmation: true },
+      { agentId: "ns-agent",        label: "Extract NS Data",   requiresConfirmation: false },
+      { agentId: "sf-agent",        label: "Extract SF Data",   requiresConfirmation: false },
+      { agentId: "opp-prep-ai",     label: "Opp Prep AI",       requiresConfirmation: false },
+      { agentId: "contract-report-gem", label: "Contract Report", requiresConfirmation: false },
     ],
   },
   {
