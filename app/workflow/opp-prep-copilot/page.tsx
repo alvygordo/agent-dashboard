@@ -369,18 +369,50 @@ export default function OppPrepCopilotWorkflow() {
                     <Badge className={`${theme.stepBadge} mb-3`}>Step 6 of 7</Badge>
                     <h2 className="text-xl font-bold text-gray-900">Contract Report</h2>
                     <p className="text-sm text-gray-500 mt-1">
-                      Open the Contract Report Gem to generate the contract report. Come back and mark complete when done.
+                      Download the contract documents below and feed them to the Gem to generate the contract report.
                     </p>
                   </div>
 
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-1 text-sm">
-                    <p className="font-medium text-gray-700">Opportunity</p>
-                    <p className="text-gray-600">{oppName}</p>
-                    {contractData?.contractTitle && (
-                      <>
-                        <p className="font-medium text-gray-700 pt-2">Contract</p>
-                        <p className="text-gray-600">{contractData.contractTitle}</p>
-                      </>
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3 text-sm">
+                    <div>
+                      <p className="font-medium text-gray-500 uppercase text-xs tracking-wide mb-1">Opportunity</p>
+                      <p className="text-gray-800 font-medium">{oppName}</p>
+                    </div>
+
+                    {(contractData?.contractUrl || contractData?.baseContractUrl || contractData?.msaUrl || (contractData?.additionalDocs?.length ?? 0) > 0) && (
+                      <div>
+                        <p className="font-medium text-gray-500 uppercase text-xs tracking-wide mb-2">Contract Documents</p>
+                        <div className="space-y-2">
+                          {contractData?.contractUrl && (
+                            <a href={contractData.contractUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline break-all">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              <span>{contractData.contractTitle || "Main Contract"}</span>
+                            </a>
+                          )}
+                          {contractData?.baseContractUrl && (
+                            <a href={contractData.baseContractUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline break-all">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              <span>{contractData.baseContractTitle || "Base Contract"}</span>
+                            </a>
+                          )}
+                          {contractData?.msaUrl && (
+                            <a href={contractData.msaUrl} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline break-all">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              <span>{contractData.msaTitle || "MSA"}</span>
+                            </a>
+                          )}
+                          {contractData?.additionalDocs?.map((doc, i) => doc.url && (
+                            <a key={i} href={doc.url} target="_blank" rel="noopener noreferrer"
+                              className="flex items-center gap-2 text-blue-600 hover:text-blue-800 hover:underline break-all">
+                              <ExternalLink className="w-3 h-3 shrink-0" />
+                              <span>{doc.title || `Document ${i + 1}`}</span>
+                            </a>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
 
@@ -390,9 +422,9 @@ export default function OppPrepCopilotWorkflow() {
                     </Button>
                   </a>
 
-                  <Button onClick={() => setStep("done")} variant="outline"
+                  <Button onClick={resetWorkflow} variant="outline"
                     className={`w-full cursor-pointer ${theme.isProd ? "border-[#00b4a2] text-[#00b4a2] hover:bg-[#e0f7f5]" : "border-purple-300 text-purple-700 hover:bg-purple-50"}`}>
-                    <CheckCircle className="w-4 h-4 mr-2" /> Mark Complete
+                    Run Another Opportunity
                   </Button>
 
                   <button onClick={() => setStep("opp-prep-ai")}
