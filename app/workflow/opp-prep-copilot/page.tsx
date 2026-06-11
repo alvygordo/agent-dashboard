@@ -298,9 +298,9 @@ export default function OppPrepCopilotWorkflow() {
           <iframe ref={sfIframeRef} src={sfAgentUrl} className="flex-1 w-full border-0" title="SF Agent" />
         </div>
 
-        {/* Opp Prep AI iframe — only mount when reached to avoid premature auth redirect */}
-        {(step === "opp-prep-ai" || step === "done") && (
-        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "opp-prep-ai" ? 20 : 10 }}>
+        {/* Opp Prep AI iframe — mount once reached, stay mounted to preserve state on back navigation */}
+        {(visitedSteps.has("opp-prep-ai") || step === "opp-prep-ai" || step === "done") && (
+        <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "opp-prep-ai" ? 20 : 5 }}>
           {step === "opp-prep-ai" && (
             <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-2">
