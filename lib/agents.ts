@@ -16,7 +16,7 @@ export type Workflow = {
   name: string
   description: string
   steps: WorkflowStep[]
-  status: "active" | "coming-soon"
+  status: "active" | "coming-soon" | "hidden"
   sandboxOnly?: boolean
 }
 
@@ -83,30 +83,6 @@ export const agents: Agent[] = [
 // ─────────────────────────────────────────────────────────────
 export const workflows: Workflow[] = [
   {
-    id: "contract-to-opp",
-    name: "Opp Prep Assistant",
-    description: "Find the correct contract, confirm it, then launch Opp Prep AI.",
-    status: "active",
-    steps: [
-      {
-        agentId: "contract-finder",
-        label: "Step 1: Find Contract",
-        requiresConfirmation: true,
-        confirmationPrompt: "Did Contract Finder find the correct contract?",
-      },
-      {
-        agentId: "opp-prep-ai",
-        label: "Step 2: Opp Prep AI",
-        requiresConfirmation: false,
-      },
-      {
-        agentId: "contract-report-gem",
-        label: "Step 3: Contract Report Gem",
-        requiresConfirmation: false,
-      },
-    ],
-  },
-  {
     id: "opp-prep-copilot",
     name: "Opp Prep Co-Pilot",
     description: "Automated pipeline — enter the opp, select the contract, and let the agents handle the rest through to Opp Prep AI.",
@@ -133,6 +109,30 @@ export const workflows: Workflow[] = [
       {
         agentId: "ns-agent",
         label: "Step 2: NS Agent",
+        requiresConfirmation: false,
+      },
+    ],
+  },
+  {
+    id: "contract-to-opp",
+    name: "Opp Prep Assistant",
+    description: "Find the correct contract, confirm it, then launch Opp Prep AI.",
+    status: "hidden",
+    steps: [
+      {
+        agentId: "contract-finder",
+        label: "Step 1: Find Contract",
+        requiresConfirmation: true,
+        confirmationPrompt: "Did Contract Finder find the correct contract?",
+      },
+      {
+        agentId: "opp-prep-ai",
+        label: "Step 2: Opp Prep AI",
+        requiresConfirmation: false,
+      },
+      {
+        agentId: "contract-report-gem",
+        label: "Step 3: Contract Report Gem",
         requiresConfirmation: false,
       },
     ],
