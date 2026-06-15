@@ -15,6 +15,9 @@ type NNROpp = {
   renewalDate: string | null
   salesOps: string
   oppUrl: string
+  caseId: string | null
+  caseStatus: string | null
+  caseUrl: string | null
 }
 
 function formatDate(dateStr: string | null) {
@@ -56,11 +59,12 @@ function SalesOpsSection({ owner, opps, accentText }: { owner: string; opps: NNR
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-gray-100">
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[22%]">NNR Notice Deadline</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[34%]">Opportunity Name</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]">NNR Required?</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]">NNR Sent?</th>
-                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[16%]">Renewal Date</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[18%]">NNR Notice Deadline</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[28%]">Opportunity Name</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[11%]">NNR Required?</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[11%]">NNR Sent?</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]">Renewal Date</th>
+                <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[18%]">NNR Case</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -77,6 +81,19 @@ function SalesOpsSection({ owner, opps, accentText }: { owner: string; opps: NNR
                   <td className="px-5 py-3.5">{yesNoBadge(opp.nnrRequired)}</td>
                   <td className="px-5 py-3.5">{yesNoBadge(opp.nnrSent)}</td>
                   <td className="px-5 py-3.5">{formatDate(opp.renewalDate)}</td>
+                  <td className="px-5 py-3.5">
+                    {opp.caseUrl ? (
+                      <a href={opp.caseUrl} target="_blank" rel="noopener noreferrer"
+                        className="flex items-center gap-1.5 group">
+                        <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-medium hover:bg-blue-100 transition-colors">
+                          {opp.caseStatus ?? "Open"}
+                        </Badge>
+                        <ExternalLink className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </a>
+                    ) : (
+                      <span className="text-gray-400 text-sm">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

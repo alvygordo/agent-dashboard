@@ -11,6 +11,13 @@ type OppRecord = {
   Sales_Ops__r: { Name: string } | null
 }
 
+type CaseRecord = {
+  Id: string
+  Subject: string
+  Status: string
+  Next_Renewal_Opportunity__c: string
+}
+
 export async function GET(req: NextRequest) {
   const email = req.cookies.get('agent_dashboard_user')?.value
   if (!email) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -44,16 +51,42 @@ export async function GET(req: NextRequest) {
        LIMIT 500`
     )
 
-    const opps = result.records.map(o => ({
-      id:          o.Id,
-      name:        o.Name,
-      nnrDeadline: o.Customer_Termination_Deadline__c,
-      nnrRequired: o.NNR_Required__c,
-      nnrSent:     o.NNR_Sent__c,
-      renewalDate: o.Renewal_Date__c,
-      salesOps:    o.Sales_Ops__r?.Name ?? 'Unassigned',
-      oppUrl:      `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
-    }))
+    // Fetch NNR cases for these opportunities
+    const oppIds = result.records.map(o => `'${o.Id}'`).join(',')
+    const caseResult = oppIds.length
+      ? await conn.query<CaseRecord>(
+          `SELECT Id, Subject, Status, Next_Renewal_Opportunity__c
+           FROM Case
+           WHERE Subject LIKE '%NNR%'
+           AND Next_Renewal_Opportunity__c IN (${oppIds})
+           ORDER BY CreatedDate DESC`
+        )
+      : { records: [] as CaseRecord[] }
+
+    // Index cases by opp ID (keep most recent per opp)
+    const caseByOpp = new Map<string, CaseRecord>()
+    for (const c of caseResult.records) {
+      if (!caseByOpp.has(c.Next_Renewal_Opportunity__c)) {
+        caseByOpp.set(c.Next_Renewal_Opportunity__c, c)
+      }
+    }
+
+    const opps = result.records.map(o => {
+      const nnrCase = caseByOpp.get(o.Id)
+      return {
+        id:          o.Id,
+        name:        o.Name,
+        nnrDeadline: o.Customer_Termination_Deadline__c,
+        nnrRequired: o.NNR_Required__c,
+        nnrSent:     o.NNR_Sent__c,
+        renewalDate: o.Renewal_Date__c,
+        salesOps:    o.Sales_Ops__r?.Name ?? 'Unassigned',
+        oppUrl:      `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
+        caseId:      nnrCase?.Id ?? null,
+        caseStatus:  nnrCase?.Status ?? null,
+        caseUrl:     nnrCase ? `${instanceUrl}/lightning/r/Case/${nnrCase.Id}/view` : null,
+      }
+    })
 
     // Group by Sales Ops
     const grouped: Record<string, typeof opps> = {}
