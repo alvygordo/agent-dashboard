@@ -203,7 +203,14 @@ export default function TasksPage() {
                       <td className="px-5 py-3.5">
                         {(() => {
                           const action = getTaskAction(task.subject, task.whatName)
-                          if (!action) return <span className="text-gray-300 text-xs">—</span>
+                          if (!action) return task.oppUrl ? (
+                            <a href={task.oppUrl} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="outline"
+                                className="border-gray-300 text-gray-600 hover:text-gray-900 cursor-pointer gap-1.5 text-xs font-medium">
+                                <ExternalLink className="w-3 h-3" /> Open Opp
+                              </Button>
+                            </a>
+                          ) : <span className="text-gray-300 text-xs">—</span>
                           if (action.type === "copilot") return (
                             <Button size="sm" onClick={() => handleAction(action)}
                               className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
