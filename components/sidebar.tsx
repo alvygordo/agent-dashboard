@@ -9,7 +9,7 @@ const navItems = [
   { href: "/",          label: "Home",      icon: Home },
   { href: "/workflows", label: "Workflows", icon: Layers },
   { href: "/agents",    label: "Agents",    icon: Bot },
-  { href: "/tools",     label: "Apps",      icon: Sparkles },
+  { href: "/tools",     label: "GPTs & Gems", icon: Sparkles },
   { href: "/tasks",     label: "Tasks",     icon: CheckSquare },
 ]
 

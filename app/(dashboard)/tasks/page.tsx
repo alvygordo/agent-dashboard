@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ExternalLink, RefreshCw, Play, Loader2, AlertCircle } from "lucide-react"
+import { ExternalLink, RefreshCw, Play, Loader2, AlertCircle, Gem, Zap } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { theme } from "@/lib/theme"
@@ -15,6 +15,39 @@ type SFTask = {
   dueDate: string | null
   taskUrl: string
   oppUrl: string | null
+}
+
+const KHOROS_GEM_URL    = "https://gemini.google.com/gem/2cc0ea7b4320"
+const UNBLOCKER_URL     = "https://trilogy-core-renewals-sales-ops.vercel.app/"
+
+type TaskAction =
+  | { type: "copilot"; oppName: string }
+  | { type: "gem";     url: string; label: string }
+  | { type: "agent";   url: string; label: string }
+
+function getTaskAction(subject: string, whatName: string | null): TaskAction | null {
+  const sub = subject.toLowerCase()
+  const rel = (whatName ?? "").toLowerCase()
+
+  // HVO / Non-HVO Opp Prep → Co-Pilot
+  if (sub.includes("hvo opp prep")) {
+    return { type: "copilot", oppName: whatName ?? subject }
+  }
+
+  // Khoros + license/provisioning → Instance Extractor Gem
+  if (rel.includes("khoros") && (
+    sub.includes("license") || sub.includes("ticket") ||
+    sub.includes("provisioning") || sub.includes("deprovisioning") || sub.includes("de-provisioning")
+  )) {
+    return { type: "gem", url: KHOROS_GEM_URL, label: "Instance Extractor" }
+  }
+
+  // Block / Blocked → Unblocker Agent
+  if (sub.includes("block")) {
+    return { type: "agent", url: UNBLOCKER_URL, label: "Unblocker Agent" }
+  }
+
+  return null
 }
 
 function priorityBadge(priority: string) {
@@ -56,9 +89,12 @@ export default function TasksPage() {
 
   useEffect(() => { load() }, [])
 
-  function runCopilot(oppName: string) {
-    const url = `/workflow/opp-prep-copilot?opp=${encodeURIComponent(oppName)}&autostart=true`
-    window.open(url, "_blank")
+  function handleAction(action: TaskAction) {
+    if (action.type === "copilot") {
+      window.open(`/workflow/opp-prep-copilot?opp=${encodeURIComponent(action.oppName)}&autostart=true`, "_blank")
+    } else {
+      window.open(action.url, "_blank")
+    }
   }
 
   const accentBg    = theme.isProd ? "bg-[#00b4a2]" : "bg-purple-700"
@@ -155,16 +191,30 @@ export default function TasksPage() {
                       {/* Due Date */}
                       <td className="px-5 py-3.5">{formatDate(task.dueDate)}</td>
 
-                      {/* Run Co-Pilot */}
+                      {/* Smart action button */}
                       <td className="px-5 py-3.5">
-                        {task.whatName ? (
-                          <Button size="sm" onClick={() => runCopilot(task.whatName!)}
-                            className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
-                            <Play className="w-3 h-3" /> Co-Pilot
-                          </Button>
-                        ) : (
-                          <span className="text-gray-300 text-xs">No opp</span>
-                        )}
+                        {(() => {
+                          const action = getTaskAction(task.subject, task.whatName)
+                          if (!action) return <span className="text-gray-300 text-xs">—</span>
+                          if (action.type === "copilot") return (
+                            <Button size="sm" onClick={() => handleAction(action)}
+                              className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
+                              <Play className="w-3 h-3" /> Co-Pilot
+                            </Button>
+                          )
+                          if (action.type === "gem") return (
+                            <Button size="sm" onClick={() => handleAction(action)}
+                              className="bg-blue-600 text-white hover:bg-blue-700 cursor-pointer gap-1.5 text-xs font-medium">
+                              <Gem className="w-3 h-3" /> {action.label}
+                            </Button>
+                          )
+                          return (
+                            <Button size="sm" onClick={() => handleAction(action)}
+                              className="bg-orange-500 text-white hover:bg-orange-600 cursor-pointer gap-1.5 text-xs font-medium">
+                              <Zap className="w-3 h-3" /> {action.label}
+                            </Button>
+                          )
+                        })()}
                       </td>
 
                     </tr>
