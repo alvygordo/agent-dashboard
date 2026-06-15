@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { getAgent } from "@/lib/agents"
 import { theme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
@@ -32,6 +33,7 @@ type NSData = {
 const GEM_URL = "https://gemini.google.com/gem/ae20cb53e35f"
 
 export default function OppPrepCopilotWorkflow() {
+  const searchParams                = useSearchParams()
   const [step, setStep]             = useState<Step>("opp-input")
   const [oppName, setOppName]       = useState("")
   const [oppNameError, setOppNameError] = useState("")
@@ -56,6 +58,16 @@ export default function OppPrepCopilotWorkflow() {
       .then(d => { if (d.token) setEmbedToken(d) })
       .catch(() => {})
   }, [])
+
+  // Auto-start from Tasks page: ?opp=<name>&autostart=true
+  useEffect(() => {
+    const opp       = searchParams.get("opp")
+    const autostart = searchParams.get("autostart")
+    if (opp && autostart === "true") {
+      setOppName(decodeURIComponent(opp))
+      setStep("find-contract")
+    }
+  }, [searchParams])
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "contract-finder-result") {

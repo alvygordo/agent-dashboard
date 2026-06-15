@@ -2,14 +2,15 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Layers, Bot, Sparkles } from "lucide-react"
+import { Home, Layers, Bot, Sparkles, CheckSquare } from "lucide-react"
 import { theme } from "@/lib/theme"
 
 const navItems = [
-  { href: "/",        label: "Home",        icon: Home },
-  { href: "/workflows", label: "Workflows",  icon: Layers },
-  { href: "/agents",  label: "Agents",      icon: Bot },
-  { href: "/tools",   label: "Apps", icon: Sparkles },
+  { href: "/",          label: "Home",      icon: Home },
+  { href: "/workflows", label: "Workflows", icon: Layers },
+  { href: "/agents",    label: "Agents",    icon: Bot },
+  { href: "/tools",     label: "Apps",      icon: Sparkles },
+  { href: "/tasks",     label: "Tasks",     icon: CheckSquare },
 ]
 
 export default function Sidebar() {
