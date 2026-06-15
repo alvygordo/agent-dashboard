@@ -10,7 +10,7 @@ export default function ToolsPage() {
       <div>
         <div className="flex items-center gap-2 mb-1">
           <Sparkles className={`w-5 h-5 ${theme.accent}`} />
-          <h1 className="text-xl font-bold text-gray-900">Apps</h1>
+          <h1 className="text-xl font-bold text-gray-900">GPTs & Gems</h1>
         </div>
         <p className="text-sm text-gray-500">External AI tools — Google Gemini Gems and ChatGPT GPTs.</p>
 
