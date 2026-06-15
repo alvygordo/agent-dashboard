@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
        AND Customer_Termination_Deadline__c != null
        AND Type = 'Renewal'
        AND NNR_Required__c = 'Yes'
+       AND NNR_Sent__c = 'To Be Sent'
        AND (Handled_by_BU__c = false OR Handled_by_BU__c = null)
        AND Renewal_Date__c >= TODAY
        AND Owner.Name != 'Fionn AI'
