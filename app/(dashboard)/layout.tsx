@@ -1,4 +1,5 @@
 import Sidebar from "@/components/sidebar"
+import UserBadge from "@/components/user-badge"
 import { Bot } from "lucide-react"
 import { theme } from "@/lib/theme"
 
@@ -23,9 +24,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className={`text-xs ${theme.headerSub}`}>Sales Ops · Core Renewals</p>
             </div>
           </div>
-          {theme.isProd && (
-            <span className={theme.envHeaderBadge!}>{theme.envHeaderBadgeText}</span>
-          )}
+          <div className={`flex items-center gap-4 ${theme.headerSub}`}>
+            <UserBadge />
+            {theme.isProd && (
+              <span className={theme.envHeaderBadge!}>{theme.envHeaderBadgeText}</span>
+            )}
+          </div>
         </div>
       </div>
 
