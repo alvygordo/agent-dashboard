@@ -68,9 +68,14 @@ function formatDate(dateStr: string | null) {
 }
 
 export default function TasksPage() {
-  const [tasks, setTasks]     = useState<SFTask[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError]     = useState<string | null>(null)
+  const [tasks, setTasks]         = useState<SFTask[]>([])
+  const [loading, setLoading]     = useState(true)
+  const [error, setError]         = useState<string | null>(null)
+  const [displayName, setDisplayName] = useState("")
+
+  function nameFromEmail(email: string) {
+    return email.split("@")[0].split(".").map(p => p.charAt(0).toUpperCase() + p.slice(1)).join(" ")
+  }
 
   async function load() {
     setLoading(true)
@@ -80,6 +85,7 @@ export default function TasksPage() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? "Failed to load tasks")
       setTasks(data.tasks ?? [])
+      if (data.userEmail) setDisplayName(nameFromEmail(data.userEmail))
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Unknown error")
     } finally {
@@ -107,7 +113,9 @@ export default function TasksPage() {
       {/* Page header */}
       <div className="bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between shrink-0">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">My Tasks</h1>
+          <h1 className="text-xl font-bold text-gray-900">
+            {displayName ? `${displayName}'s Open Tasks` : "My Open Tasks"}
+          </h1>
           <p className="text-sm text-gray-500 mt-0.5">Open Salesforce tasks assigned to you</p>
         </div>
         <Button variant="outline" onClick={load} disabled={loading}

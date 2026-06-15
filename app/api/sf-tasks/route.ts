@@ -48,7 +48,7 @@ export async function GET(req: NextRequest) {
       oppUrl:   t.WhatId ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view` : null,
     }))
 
-    return NextResponse.json({ tasks })
+    return NextResponse.json({ tasks, userEmail: email })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
