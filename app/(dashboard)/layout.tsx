@@ -24,11 +24,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               <p className={`text-xs ${theme.headerSub}`}>Sales Ops · Core Renewals</p>
             </div>
           </div>
-          <div className={`flex items-center gap-4 ${theme.headerSub}`}>
-            <UserBadge />
+          <div className={`flex flex-col items-end gap-1 ${theme.headerSub}`}>
             {theme.isProd && (
               <span className={theme.envHeaderBadge!}>{theme.envHeaderBadgeText}</span>
             )}
+            <UserBadge />
           </div>
         </div>
       </div>
