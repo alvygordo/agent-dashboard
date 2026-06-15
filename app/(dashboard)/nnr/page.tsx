@@ -10,10 +10,10 @@ type NNROpp = {
   id: string
   name: string
   nnrDeadline: string | null
-  nnrRequired: boolean | null
-  nnrSent: boolean | null
+  nnrRequired: string | null
+  nnrSent: string | null
   renewalDate: string | null
-  ownerName: string
+  salesOps: string
   oppUrl: string
 }
 
@@ -26,13 +26,14 @@ function formatDate(dateStr: string | null) {
   return <span className={isOverdue ? "text-red-600 font-medium" : "text-gray-700"}>{label}</span>
 }
 
-function boolBadge(val: boolean | null, trueLabel = "Yes", falseLabel = "No") {
-  if (val === true)  return <Badge className="bg-green-100 text-green-700 border-green-200 font-medium">{trueLabel}</Badge>
-  if (val === false) return <Badge className="bg-gray-100 text-gray-500 border-gray-200 font-medium">{falseLabel}</Badge>
+function yesNoBadge(val: string | null) {
+  const v = (val ?? "").toLowerCase()
+  if (v === "yes") return <Badge className="bg-green-100 text-green-700 border-green-200 font-medium">Yes</Badge>
+  if (v === "no")  return <Badge className="bg-gray-100 text-gray-500 border-gray-200 font-medium">No</Badge>
   return <span className="text-gray-400 text-sm">—</span>
 }
 
-function OwnerSection({ owner, opps, accentText }: { owner: string; opps: NNROpp[]; accentText: string }) {
+function SalesOpsSection({ owner, opps, accentText }: { owner: string; opps: NNROpp[]; accentText: string }) {
   const [collapsed, setCollapsed] = useState(false)
 
   return (
@@ -73,8 +74,8 @@ function OwnerSection({ owner, opps, accentText }: { owner: string; opps: NNROpp
                       <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                     </a>
                   </td>
-                  <td className="px-5 py-3.5">{boolBadge(opp.nnrRequired)}</td>
-                  <td className="px-5 py-3.5">{boolBadge(opp.nnrSent)}</td>
+                  <td className="px-5 py-3.5">{yesNoBadge(opp.nnrRequired)}</td>
+                  <td className="px-5 py-3.5">{yesNoBadge(opp.nnrSent)}</td>
                   <td className="px-5 py-3.5">{formatDate(opp.renewalDate)}</td>
                 </tr>
               ))}
@@ -155,7 +156,7 @@ export default function NNRTrackerPage() {
         )}
 
         {!loading && !error && owners.map(owner => (
-          <OwnerSection key={owner} owner={owner} opps={grouped[owner]} accentText={accentText} />
+          <SalesOpsSection key={owner} owner={owner} opps={grouped[owner]} accentText={accentText} />
         ))}
 
       </div>

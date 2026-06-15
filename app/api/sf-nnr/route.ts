@@ -5,10 +5,10 @@ type OppRecord = {
   Id: string
   Name: string
   Customer_Termination_Deadline__c: string | null
-  NNR_Required__c: boolean | null
-  NNR_Sent__c: boolean | null
+  NNR_Required__c: string | null
+  NNR_Sent__c: string | null
   Renewal_Date__c: string | null
-  Owner: { Name: string }
+  Sales_Ops__r: { Name: string } | null
 }
 
 export async function GET(req: NextRequest) {
@@ -35,29 +35,30 @@ export async function GET(req: NextRequest) {
        WHERE IsClosed = false
        AND Customer_Termination_Deadline__c != null
        AND Type = 'Renewal'
+       AND NNR_Required__c = 'Yes'
        AND (Handled_by_BU__c = false OR Handled_by_BU__c = null)
        AND Renewal_Date__c >= TODAY
        AND Owner.Name != 'Fionn AI'
-       ORDER BY Owner.Name ASC, Customer_Termination_Deadline__c ASC NULLS LAST
+       ORDER BY Sales_Ops__r.Name ASC NULLS LAST, Customer_Termination_Deadline__c ASC NULLS LAST
        LIMIT 500`
     )
 
     const opps = result.records.map(o => ({
-      id:              o.Id,
-      name:            o.Name,
-      nnrDeadline:     o.Customer_Termination_Deadline__c,
-      nnrRequired:     o.NNR_Required__c,
-      nnrSent:         o.NNR_Sent__c,
-      renewalDate:     o.Renewal_Date__c,
-      ownerName:       o.Owner?.Name ?? 'Unassigned',
-      oppUrl:          `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
+      id:          o.Id,
+      name:        o.Name,
+      nnrDeadline: o.Customer_Termination_Deadline__c,
+      nnrRequired: o.NNR_Required__c,
+      nnrSent:     o.NNR_Sent__c,
+      renewalDate: o.Renewal_Date__c,
+      salesOps:    o.Sales_Ops__r?.Name ?? 'Unassigned',
+      oppUrl:      `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
     }))
 
-    // Group by owner
+    // Group by Sales Ops
     const grouped: Record<string, typeof opps> = {}
     for (const opp of opps) {
-      if (!grouped[opp.ownerName]) grouped[opp.ownerName] = []
-      grouped[opp.ownerName].push(opp)
+      if (!grouped[opp.salesOps]) grouped[opp.salesOps] = []
+      grouped[opp.salesOps].push(opp)
     }
 
     return NextResponse.json({ grouped, total: opps.length })
