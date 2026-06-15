@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
        FROM Task
        WHERE IsClosed = false
        AND Owner.Email = '${safeEmail}'
-       ORDER BY Priority DESC NULLS LAST, ActivityDate ASC NULLS LAST
+       ORDER BY ActivityDate ASC NULLS LAST, Priority DESC NULLS LAST
        LIMIT 200`
     )
 
