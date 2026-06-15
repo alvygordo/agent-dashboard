@@ -33,9 +33,9 @@ export default function UserBadge() {
   if (!name) return null
 
   return (
-    <div className="flex items-center gap-1.5 text-xs opacity-80">
-      <UserCircle className="w-3.5 h-3.5" />
-      <span className="font-medium">{name}</span>
+    <div className="flex items-center gap-2 opacity-80">
+      <UserCircle className="w-5 h-5" />
+      <span className="text-base font-semibold">{name}</span>
     </div>
   )
 }
