@@ -34,6 +34,10 @@ export async function GET(req: NextRequest) {
        FROM Opportunity
        WHERE IsClosed = false
        AND Customer_Termination_Deadline__c != null
+       AND Type = 'Renewal'
+       AND (Handled_by_BU__c = false OR Handled_by_BU__c = null)
+       AND Renewal_Date__c >= TODAY
+       AND Owner.Name != 'Fionn AI'
        ORDER BY Owner.Name ASC, Customer_Termination_Deadline__c ASC NULLS LAST
        LIMIT 500`
     )
