@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
 
     const result = await conn.query<OppRecord>(
       `SELECT Id, Name, Customer_Termination_Deadline__c, NNR_Required__c, NNR_Sent__c,
-              Renewal_Date__c, Owner.Name
+              Renewal_Date__c, Sales_Ops__r.Name
        FROM Opportunity
        WHERE IsClosed = false
        AND Customer_Termination_Deadline__c != null
