@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { getAgent } from "@/lib/agents"
@@ -32,7 +32,7 @@ type NSData = {
 
 const GEM_URL = "https://gemini.google.com/gem/ae20cb53e35f"
 
-export default function OppPrepCopilotWorkflow() {
+function OppPrepCopilotInner() {
   const searchParams                = useSearchParams()
   const [step, setStep]             = useState<Step>("opp-input")
   const [oppName, setOppName]       = useState("")
@@ -511,5 +511,13 @@ export default function OppPrepCopilotWorkflow() {
 
       </div>
     </main>
+  )
+}
+
+export default function OppPrepCopilotWorkflow() {
+  return (
+    <Suspense fallback={null}>
+      <OppPrepCopilotInner />
+    </Suspense>
   )
 }
