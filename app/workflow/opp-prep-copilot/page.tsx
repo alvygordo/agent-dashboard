@@ -48,7 +48,6 @@ function OppPrepCopilotInner() {
   const nsHandoffSent               = useRef(false)
   const sfHandoffSent               = useRef(false)
   const [embedToken, setEmbedToken] = useState<{ email: string; token: string } | null>(null)
-
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
   const sfAgent        = getAgent("sf-agent")!
