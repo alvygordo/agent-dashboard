@@ -48,8 +48,6 @@ function OppPrepCopilotInner() {
   const nsHandoffSent               = useRef(false)
   const sfHandoffSent               = useRef(false)
   const [embedToken, setEmbedToken] = useState<{ email: string; token: string } | null>(null)
-  const autoFindRan = useRef(false)
-
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
   const sfAgent        = getAgent("sf-agent")!
@@ -99,26 +97,6 @@ function OppPrepCopilotInner() {
   useEffect(() => {
     setVisitedSteps(prev => new Set(prev).add(step))
   }, [step])
-
-  // Auto-find contract via dashboard API when autostart=true (parallel with CF iframe)
-  useEffect(() => {
-    if (!autostart || !autoOpp || step !== "find-contract" || autoFindRan.current) return
-    autoFindRan.current = true
-    fetch(`/api/sf-find-contract?opp=${encodeURIComponent(decodeURIComponent(autoOpp))}`)
-      .then(r => r.json())
-      .then(data => {
-        if (!data.contract) return
-        const allFiles: { url: string; title: string }[] = (data.allFiles ?? []).slice(1, 5).map((f: { url: string; title: string }) => ({ url: f.url, title: f.title }))
-        setContractData({
-          contractUrl: data.contract.url, contractTitle: data.contract.title,
-          baseContractUrl: "", baseContractTitle: "", isPackage: false,
-          msaUrl: "", msaTitle: "", additionalDocs: allFiles,
-          oppId: data.oppId, oppUrl: data.oppUrl,
-        })
-        setStep("ns-agent")
-      })
-      .catch(() => {})
-  }, [autostart, autoOpp, step])
 
   // NS Agent handoff — send once
   useEffect(() => {
@@ -284,15 +262,9 @@ function OppPrepCopilotInner() {
           {step === "find-contract" && (
             <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
               <div className="flex items-center gap-2">
-                {autostart
-                  ? <Loader2 className={`w-4 h-4 ${theme.instructionIcon} shrink-0 animate-spin`} />
-                  : <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
-                }
+                <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
                 <p className={`text-sm ${theme.instructionText}`}>
-                  {autostart
-                    ? <><strong>Finding contract automatically…</strong> This will advance on its own.</>
-                    : <><strong>Find the correct contract below.</strong> Click <strong>✓ Use this contract</strong> to continue — the rest of the pipeline will run automatically.</>
-                  }
+                  <strong>Find the correct contract below.</strong> Click <strong>✓ Use this contract</strong> to continue — the rest of the pipeline will run automatically.
                 </p>
               </div>
               <Button onClick={() => setStep("opp-input")} variant="ghost"
