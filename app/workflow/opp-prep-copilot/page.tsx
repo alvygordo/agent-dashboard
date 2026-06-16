@@ -34,8 +34,10 @@ const GEM_URL = "https://gemini.google.com/gem/ae20cb53e35f"
 
 function OppPrepCopilotInner() {
   const searchParams                = useSearchParams()
-  const [step, setStep]             = useState<Step>("opp-input")
-  const [oppName, setOppName]       = useState("")
+  const autoOpp                     = searchParams.get("opp")
+  const autostart                   = searchParams.get("autostart") === "true"
+  const [step, setStep]             = useState<Step>(() => autoOpp && autostart ? "find-contract" : "opp-input")
+  const [oppName, setOppName]       = useState(() => autoOpp && autostart ? decodeURIComponent(autoOpp) : "")
   const [oppNameError, setOppNameError] = useState("")
   const [contractData, setContractData] = useState<ContractData | null>(null)
   const [nsData, setNsData]         = useState<NSData | null>(null)
@@ -58,16 +60,6 @@ function OppPrepCopilotInner() {
       .then(d => { if (d.token) setEmbedToken(d) })
       .catch(() => {})
   }, [])
-
-  // Auto-start from Tasks page: ?opp=<name>&autostart=true
-  useEffect(() => {
-    const opp       = searchParams.get("opp")
-    const autostart = searchParams.get("autostart")
-    if (opp && autostart === "true") {
-      setOppName(decodeURIComponent(opp))
-      setStep("find-contract")
-    }
-  }, [searchParams])
 
   const handleMessage = useCallback((event: MessageEvent) => {
     if (event.data?.type === "contract-finder-result") {
