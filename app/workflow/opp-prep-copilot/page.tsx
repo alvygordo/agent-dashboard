@@ -25,6 +25,8 @@ type ContractData = {
   oppUrl: string
 }
 
+type AutoFindState = "idle" | "loading" | "done" | "error" | "not-found"
+
 type NSData = {
   oppName: string
   nsData: unknown
@@ -48,6 +50,8 @@ function OppPrepCopilotInner() {
   const nsHandoffSent               = useRef(false)
   const sfHandoffSent               = useRef(false)
   const [embedToken, setEmbedToken] = useState<{ email: string; token: string } | null>(null)
+  const [autoFindState, setAutoFindState] = useState<AutoFindState>("idle")
+  const autoFindRan = useRef(false)
 
   const contractFinder = getAgent("contract-finder")!
   const nsAgent        = getAgent("ns-agent")!
@@ -98,6 +102,37 @@ function OppPrepCopilotInner() {
   useEffect(() => {
     setVisitedSteps(prev => new Set(prev).add(step))
   }, [step])
+
+  // Auto-find contract from dashboard API when autostart=true
+  useEffect(() => {
+    if (!autostart || !autoOpp || step !== "find-contract" || autoFindRan.current) return
+    autoFindRan.current = true
+    setAutoFindState("loading")
+    fetch(`/api/sf-find-contract?opp=${encodeURIComponent(decodeURIComponent(autoOpp))}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.error || !data.contract) {
+          setAutoFindState(data.contract === null ? "not-found" : "error")
+          return
+        }
+        const allFiles: { url: string; title: string }[] = (data.allFiles ?? []).slice(1, 5).map((f: { url: string; title: string }) => ({ url: f.url, title: f.title }))
+        setContractData({
+          contractUrl:       data.contract.url,
+          contractTitle:     data.contract.title,
+          baseContractUrl:   "",
+          baseContractTitle: "",
+          isPackage:         false,
+          msaUrl:            "",
+          msaTitle:          "",
+          additionalDocs:    allFiles,
+          oppId:             data.oppId,
+          oppUrl:            data.oppUrl,
+        })
+        setAutoFindState("done")
+        setStep("ns-agent")
+      })
+      .catch(() => setAutoFindState("error"))
+  }, [autostart, autoOpp, step])
 
   // NS Agent handoff — send once
   useEffect(() => {
@@ -258,23 +293,37 @@ function OppPrepCopilotInner() {
       {/* Content */}
       <div className="relative flex-1 min-h-0 flex flex-col">
 
-        {/* Contract Finder iframe */}
+        {/* Contract Finder — auto-find overlay when autostart, iframe otherwise */}
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", zIndex: step === "find-contract" ? 20 : 10 }}>
-          {step === "find-contract" && (
-            <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
-              <div className="flex items-center gap-2">
-                <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
-                <p className={`text-sm ${theme.instructionText}`}>
-                  <strong>Find the correct contract below.</strong> Click <strong>✓ Use this contract</strong> to continue — the rest of the pipeline will run automatically.
-                </p>
+          {step === "find-contract" && autostart && autoFindState !== "not-found" && autoFindState !== "error" ? (
+            <div className="flex-1 flex items-center justify-center bg-gray-50">
+              <div className="text-center space-y-3">
+                <Loader2 className={`w-8 h-8 animate-spin mx-auto ${theme.instructionIcon}`} />
+                <p className="text-sm font-medium text-gray-700">Finding contract for <strong>{oppName}</strong>…</p>
               </div>
-              <Button onClick={() => setStep("opp-input")} variant="ghost"
-                className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}>
-                <ArrowLeft className="w-3 h-3 mr-1" /> Back
-              </Button>
             </div>
+          ) : (
+            <>
+              {step === "find-contract" && (
+                <div className={`${theme.instructionBar} px-6 py-3 flex items-center justify-between shrink-0`}>
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className={`w-4 h-4 ${theme.instructionIcon} shrink-0`} />
+                    <p className={`text-sm ${theme.instructionText}`}>
+                      {autoFindState === "not-found" || autoFindState === "error"
+                        ? <><strong>Couldn&apos;t auto-find the contract.</strong> Search manually below.</>
+                        : <><strong>Find the correct contract below.</strong> Click <strong>✓ Use this contract</strong> to continue — the rest of the pipeline will run automatically.</>
+                      }
+                    </p>
+                  </div>
+                  <Button onClick={() => setStep("opp-input")} variant="ghost"
+                    className={`${theme.instructionBack} text-sm shrink-0 cursor-pointer ml-4`}>
+                    <ArrowLeft className="w-3 h-3 mr-1" /> Back
+                  </Button>
+                </div>
+              )}
+              <iframe src={contractFinderUrl} className="flex-1 w-full border-0" title="Contract Finder" />
+            </>
           )}
-          <iframe src={contractFinderUrl} className="flex-1 w-full border-0" title="Contract Finder" />
         </div>
 
         {/* NS Agent iframe */}
