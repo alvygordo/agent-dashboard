@@ -38,21 +38,52 @@ export async function GET(req: NextRequest) {
     const colKeys    = reportMetadata.detailColumns ?? []
     const headers    = colKeys.map(k => columnInfo[k]?.label ?? k)
 
-    // Tabular reports: factMap["T!T"]
-    const factKey  = Object.keys(factMap).find(k => factMap[k]?.rows) ?? 'T!T'
-    const rows     = (factMap[factKey]?.rows ?? []).map((row: SFRow) =>
-      row.dataCells.map((cell: SFCell) => {
+    // Collect all detail rows across all factMap keys (handles both tabular and summary reports)
+    const allRows: SFRow[] = []
+    for (const key of Object.keys(factMap)) {
+      const entry = factMap[key]
+      if (entry?.rows?.length) allRows.push(...entry.rows)
+    }
+
+    const oppNameColIdx = headers.findIndex(h => h.toLowerCase() === 'opportunity name')
+
+    // Collect unique opp names to resolve IDs via SOQL (needed because summary reports return opp name as plain string, no URL)
+    let oppNameToUrl: Record<string, string> = {}
+    if (oppNameColIdx >= 0) {
+      const names = [...new Set(
+        allRows
+          .map(r => r.dataCells[oppNameColIdx]?.label)
+          .filter((n): n is string => !!n && n !== '-')
+      )]
+      if (names.length) {
+        const escaped = names.map(n => `'${n.replace(/'/g, "\\'")}'`).join(', ')
+        type OppRecord = { Id: string; Name: string }
+        const soql = `SELECT Id, Name FROM Opportunity WHERE Name IN (${escaped}) LIMIT 500`
+        const oppResult = await conn.query<OppRecord>(soql)
+        for (const opp of oppResult.records) {
+          oppNameToUrl[opp.Name] = `${instanceUrl}/lightning/r/Opportunity/${opp.Id}/view`
+        }
+      }
+    }
+
+    const rows = allRows.map((row: SFRow) =>
+      row.dataCells.map((cell: SFCell, idx: number) => {
         if (cell.value && typeof cell.value === 'object' && 'url' in (cell.value as object)) {
           const rawUrl = (cell.value as { url: string }).url
-          const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${instanceUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
-          return { label: cell.label, url: fullUrl }
+          if (rawUrl) {
+            const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${instanceUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
+            return { label: cell.label, url: fullUrl }
+          }
+        }
+        // For opportunity name cells, use the SOQL-resolved URL
+        if (idx === oppNameColIdx && cell.label && oppNameToUrl[cell.label]) {
+          return { label: cell.label, url: oppNameToUrl[cell.label] }
         }
         return { label: cell.label ?? '', url: null }
       })
     )
 
-    const debugFirstRow = (factMap[factKey]?.rows ?? [])[0]?.dataCells ?? []
-    return NextResponse.json({ headers, rows, total: rows.length, _debug: debugFirstRow })
+    return NextResponse.json({ headers, rows, total: rows.length })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
