@@ -21,14 +21,12 @@ export async function GET(req: NextRequest) {
     const conn = new jsforce.Connection({ loginUrl: 'https://login.salesforce.com' })
     await conn.login(username, password + token)
 
-    // SF Reports REST API
+    // SF Reports REST API — GET runs the saved report without needing metadata in body
     const result = await (conn as unknown as {
-      request: (opts: { method: string; url: string; body: string; headers: Record<string, string> }) => Promise<unknown>
+      request: (opts: { method: string; url: string }) => Promise<unknown>
     }).request({
-      method: 'POST',
+      method: 'GET',
       url:    `/services/data/v59.0/analytics/reports/${reportId}?includeDetails=true`,
-      body:   JSON.stringify({}),
-      headers: { 'Content-Type': 'application/json' },
     }) as {
       reportMetadata: { detailColumns: string[]; reportFormat: string }
       factMap:        Record<string, { rows?: SFRow[] }>
