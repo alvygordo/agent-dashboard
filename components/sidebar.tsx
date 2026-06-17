@@ -1,17 +1,19 @@
 "use client"
 
+import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList } from "lucide-react"
+import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList, BookOpen } from "lucide-react"
 import { theme } from "@/lib/theme"
 
-const navItems = [
-  { href: "/",          label: "Home",        icon: Home },
-  { href: "/workflows", label: "Workflows",   icon: Layers },
-  { href: "/agents",    label: "Agents",      icon: Bot },
-  { href: "/tools",     label: "GPTs & Gems", icon: Sparkles },
-  { href: "/tasks",     label: "Tasks",       icon: CheckSquare },
-  { href: "/nnr",       label: "NNR Tracker", icon: ClipboardList },
+const navItems: { href: string; label: string; icon: React.ElementType; sandboxOnly?: boolean }[] = [
+  { href: "/",          label: "Home",           icon: Home },
+  { href: "/workflows", label: "Workflows",      icon: Layers },
+  { href: "/agents",    label: "Agents",         icon: Bot },
+  { href: "/tools",     label: "GPTs & Gems",    icon: Sparkles },
+  { href: "/tasks",     label: "Tasks",          icon: CheckSquare },
+  { href: "/nnr",       label: "NNR Tracker",    icon: ClipboardList },
+  { href: "/kb",        label: "Knowledge Base", icon: BookOpen, sandboxOnly: true },
 ]
 
 export default function Sidebar() {
@@ -37,7 +39,8 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ href, label, icon: Icon }) => {
+        {navItems.map(({ href, label, icon: Icon, sandboxOnly }) => {
+          if (sandboxOnly && theme.isProd) return null
           const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href)
           return (
             <Link
