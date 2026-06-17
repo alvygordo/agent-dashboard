@@ -33,7 +33,7 @@ const productKB = [
     type: "sheet" as const,
     title: "CPM — S2 Tracker",
     description: "S2 tracker spreadsheet for CPM tracking and management.",
-    url: "https://docs.google.com/spreadsheets/d/1UPA6fqhpzpz-yp4XPIxzzGb8KdzlqRhm7l8g3whOeeA/edit?gid=809042891#gid=809042891",
+    url: "https://docs.google.com/spreadsheets/d/1UPA6fqhpzpz-yp4XPIxzzGb8KdzlqRhm7l8g3whOeeA/edit?gid=1694050839#gid=1694050839",
     meta: "Google Sheets",
   },
   {
