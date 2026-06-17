@@ -1,9 +1,8 @@
 "use client"
 
-import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList, BookOpen } from "lucide-react"
+import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList } from "lucide-react"
 import { theme } from "@/lib/theme"
 
 const navItems = [
@@ -13,7 +12,6 @@ const navItems = [
   { href: "/tools",     label: "GPTs & Gems", icon: Sparkles },
   { href: "/tasks",     label: "Tasks",       icon: CheckSquare },
   { href: "/nnr",       label: "NNR Tracker", icon: ClipboardList },
-  { href: "/kb",        label: "Knowledge Base", icon: BookOpen, sandboxOnly: true },
 ]
 
 export default function Sidebar() {
@@ -39,8 +37,7 @@ export default function Sidebar() {
 
       {/* Nav */}
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(({ href, label, icon: Icon, sandboxOnly }: { href: string; label: string; icon: React.ElementType; sandboxOnly?: boolean }) => {
-          if (sandboxOnly && theme.isProd) return null
+        {navItems.map(({ href, label, icon: Icon }) => {
           const isActive = href === "/" ? pathname === "/" : pathname.startsWith(href)
           return (
             <Link
