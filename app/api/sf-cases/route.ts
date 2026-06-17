@@ -35,6 +35,7 @@ export async function GET(req: NextRequest) {
       `SELECT Id, CaseNumber, Subject, Status, Priority, Account.Name, CreatedDate
        FROM Case
        WHERE IsClosed = false
+       AND Status NOT IN ('Legal Completed', 'Closed', 'Not Actionable / Rejected')
        ${ownerFilter}
        ORDER BY CreatedDate DESC
        LIMIT 200`
