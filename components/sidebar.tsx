@@ -13,7 +13,7 @@ const navItems: { href: string; label: string; icon: React.ElementType; sandboxO
   { href: "/tools",     label: "GPTs & Gems",    icon: Sparkles },
   { href: "/tasks",     label: "Tasks",          icon: CheckSquare },
   { href: "/nnr",       label: "NNR Tracker",    icon: ClipboardList },
-  { href: "/kb",        label: "Knowledge Base", icon: BookOpen, sandboxOnly: true },
+  { href: "/kb",        label: "Knowledge Base", icon: BookOpen },
 ]
 
 export default function Sidebar() {
