@@ -51,7 +51,8 @@ export async function GET(req: NextRequest) {
       })
     )
 
-    return NextResponse.json({ headers, rows, total: rows.length })
+    const debugFirstRow = (factMap[factKey]?.rows ?? [])[0]?.dataCells ?? []
+    return NextResponse.json({ headers, rows, total: rows.length, _debug: debugFirstRow })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
