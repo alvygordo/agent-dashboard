@@ -5,10 +5,34 @@ import { BarChart2, ExternalLink, Loader2, AlertCircle, RefreshCw } from "lucide
 import { theme } from "@/lib/theme"
 
 const tabs = [
-  { label: "Opps w/o Contact First Name", reportId: "00OIh000000m0heMAA" },
-  { label: "Opps Missing Critical AR Info", reportId: "00O2x0000047MXiEAM" },
-  { label: "Opps Stuck in Finalizing",      reportId: "00O2x0000046wN7EAI" },
-  { label: "My Open Cases",                 reportId: null },
+  {
+    label:      "Opps w/o Contact First Name",
+    reportId:   "00OIh000000m0heMAA",
+    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00OIh000000m0heMAA/view",
+    showCols:   ["last name", "first name", "email", "opportunity name", "renewal date", "close date"],
+    sortByCol:  "renewal date",
+  },
+  {
+    label:      "Opps Missing Critical AR Info",
+    reportId:   "00O2x0000047MXiEAM",
+    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00O2x0000047MXiEAM/view",
+    showCols:   null,
+    sortByCol:  null,
+  },
+  {
+    label:      "Opps Stuck in Finalizing",
+    reportId:   "00O2x0000046wN7EAI",
+    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00O2x0000046wN7EAI/view",
+    showCols:   ["opportunity name", "renewal date", "close date", "win type"],
+    sortByCol:  "renewal date",
+  },
+  {
+    label:      "My Open Cases",
+    reportId:   null,
+    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/o/Case/list?filterName=My_Open_Customer_Inquries",
+    showCols:   null,
+    sortByCol:  null,
+  },
 ] as const
 
 type ReportRow   = { label: string; url: string | null }[]
@@ -33,17 +57,50 @@ function StatusBadge({ value, type }: { value: string; type?: "priority" | "stat
   )
 }
 
-function ReportTable({ data }: { data: ReportData }) {
-  if (!data.rows.length) return (
+function ReportTable({ data, showCols, sortByCol }: {
+  data: ReportData
+  showCols: readonly string[] | null
+  sortByCol: string | null
+}) {
+  // Filter to visible columns
+  const colIndices = showCols
+    ? data.headers.reduce<number[]>((acc, h, i) => {
+        if (showCols.some(s => h.toLowerCase().includes(s))) acc.push(i)
+        return acc
+      }, [])
+    : data.headers.map((_, i) => i)
+
+  const visibleHeaders = colIndices.map(i => data.headers[i])
+
+  // Filter rows to visible columns
+  let visibleRows = data.rows.map(row => colIndices.map(i => row[i] ?? { label: "", url: null }))
+
+  // Sort by column label
+  if (sortByCol) {
+    const sortIdx = visibleHeaders.findIndex(h => h.toLowerCase().includes(sortByCol))
+    if (sortIdx >= 0) {
+      visibleRows = [...visibleRows].sort((a, b) => {
+        const av = a[sortIdx]?.label ?? ""
+        const bv = b[sortIdx]?.label ?? ""
+        // Date sort: try parsing as date first
+        const ad = Date.parse(av), bd = Date.parse(bv)
+        if (!isNaN(ad) && !isNaN(bd)) return ad - bd
+        return av.localeCompare(bv)
+      })
+    }
+  }
+
+  if (!visibleRows.length) return (
     <div className="text-center py-16 text-sm text-gray-400">No records found.</div>
   )
+
   return (
     <div className="overflow-x-auto">
       <div className="text-xs text-gray-400 mb-2">{data.total} record{data.total !== 1 ? "s" : ""}</div>
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
-            {data.headers.map((h, i) => (
+            {visibleHeaders.map((h, i) => (
               <th key={i} className="text-left px-3 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                 {h}
               </th>
@@ -51,7 +108,7 @@ function ReportTable({ data }: { data: ReportData }) {
           </tr>
         </thead>
         <tbody>
-          {data.rows.map((row, ri) => (
+          {visibleRows.map((row, ri) => (
             <tr key={ri} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
               {row.map((cell, ci) => (
                 <td key={ci} className="px-3 py-2.5 text-gray-700 max-w-xs">
@@ -159,7 +216,15 @@ export default function SFReportsPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900">SF Reports</h1>
           </div>
-          <p className="text-sm text-gray-500 ml-12">Live Salesforce data — refreshes on tab switch.</p>
+          <div className="flex items-center gap-3 ml-12">
+            <p className="text-sm text-gray-500">Live Salesforce data — refreshes on tab switch.</p>
+            {tab.sfUrl && (
+              <a href={tab.sfUrl} target="_blank" rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 text-xs font-medium hover:underline ${theme.isProd ? "text-[#009688]" : "text-purple-600"}`}>
+                View in Salesforce <ExternalLink className="w-3 h-3" />
+              </a>
+            )}
+          </div>
         </div>
         <button
           onClick={() => fetchTab(activeTab, true)}
@@ -213,7 +278,7 @@ export default function SFReportsPage() {
         )}
 
         {!loading && current && !('error' in current) && tab.reportId && (
-          <ReportTable data={current as ReportData} />
+          <ReportTable data={current as ReportData} showCols={tab.showCols} sortByCol={tab.sortByCol} />
         )}
 
         {!loading && current && !('error' in current) && !tab.reportId && (
