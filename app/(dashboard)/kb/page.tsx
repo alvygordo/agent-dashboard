@@ -4,7 +4,7 @@ import { useState } from "react"
 import { BookOpen, ExternalLink, FolderOpen, FileText } from "lucide-react"
 import { theme } from "@/lib/theme"
 
-const tabs = ["Product KB", "Product Repo", "Renewals Playbook"] as const
+const tabs = ["Product KB", "Product Repo", "Renewals Playbook", "Support"] as const
 type Tab = typeof tabs[number]
 
 const productKB = [
@@ -34,20 +34,6 @@ const productKB = [
     title: "CPM — S2 Tracker",
     description: "S2 tracker spreadsheet for CPM tracking and management.",
     url: "https://docs.google.com/spreadsheets/d/1UPA6fqhpzpz-yp4XPIxzzGb8KdzlqRhm7l8g3whOeeA/edit?gid=1694050839#gid=1694050839",
-    meta: "Google Sheets",
-  },
-  {
-    type: "sheet" as const,
-    title: "Product Support Queues",
-    description: "Product support queue tracker.",
-    url: "https://docs.google.com/spreadsheets/d/1bySzm2pHZK5p5ny9R44_YPUPlETRokNMLyCpj5J8bq4/edit?gid=839128997#gid=839128997",
-    meta: "Google Sheets",
-  },
-  {
-    type: "sheet" as const,
-    title: "Contracting Entities by Product",
-    description: "Reference sheet mapping contracting entities to their respective products.",
-    url: "https://docs.google.com/spreadsheets/d/1x7zyJjFALpeC3IE_zPKEcPfqjlYv3jaMmjsS1iXc1Rk/edit?gid=1213553245#gid=1213553245",
     meta: "Google Sheets",
   },
 ]
@@ -91,6 +77,33 @@ const renewalsPlaybook = [
     description: "Step-by-step runbook for processing decommissioning requests.",
     url: "https://docs.google.com/document/d/1SEm8qzIvN9l-k_pd5DF2ICPiqMqIux8-/edit",
     meta: "Google Docs",
+  },
+]
+
+const support = [
+  {
+    title: "Product Support Queues",
+    description: "Product support queue tracker.",
+    url: "https://docs.google.com/spreadsheets/d/1bySzm2pHZK5p5ny9R44_YPUPlETRokNMLyCpj5J8bq4/edit?gid=839128997#gid=839128997",
+    meta: "Google Sheets",
+  },
+  {
+    title: "Contracting Entities by Product",
+    description: "Reference sheet mapping contracting entities to their respective products.",
+    url: "https://docs.google.com/spreadsheets/d/1x7zyJjFALpeC3IE_zPKEcPfqjlYv3jaMmjsS1iXc1Rk/edit?gid=1213553245#gid=1213553245",
+    meta: "Google Sheets",
+  },
+  {
+    title: "O2C",
+    description: "Order-to-Cash Jira board.",
+    url: "https://devgraph-alp.atlassian.net/jira/for-you?tab=workedon",
+    meta: "Jira",
+  },
+  {
+    title: "Khoros Decomm Missing Data",
+    description: "Kayako support desk — Khoros decommissioning missing data conversations.",
+    url: "https://central-supportdesk.kayako.com/agent/conversations/view/1",
+    meta: "Kayako",
   },
 ]
 
@@ -202,6 +215,12 @@ export default function KnowledgeBasePage() {
       {activeTab === "Renewals Playbook" && (
         <div className="space-y-4">
           {renewalsPlaybook.map(item => <RepoCard key={item.url} item={item} />)}
+        </div>
+      )}
+
+      {activeTab === "Support" && (
+        <div className="space-y-4">
+          {support.map(item => <RepoCard key={item.url} item={item} />)}
         </div>
       )}
 
