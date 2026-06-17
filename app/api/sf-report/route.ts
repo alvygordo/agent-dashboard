@@ -43,7 +43,9 @@ export async function GET(req: NextRequest) {
     const rows     = (factMap[factKey]?.rows ?? []).map((row: SFRow) =>
       row.dataCells.map((cell: SFCell) => {
         if (cell.value && typeof cell.value === 'object' && 'url' in (cell.value as object)) {
-          return { label: cell.label, url: `${instanceUrl}/${(cell.value as { url: string }).url}` }
+          const rawUrl = (cell.value as { url: string }).url
+          const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${instanceUrl}${rawUrl.startsWith('/') ? '' : '/'}${rawUrl}`
+          return { label: cell.label, url: fullUrl }
         }
         return { label: cell.label ?? '', url: null }
       })

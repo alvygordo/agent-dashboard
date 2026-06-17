@@ -57,10 +57,12 @@ function StatusBadge({ value, type }: { value: string; type?: "priority" | "stat
   )
 }
 
-function ReportTable({ data, showCols, sortByCol }: {
+function ReportTable({ data, showCols, sortByCol, title, sfUrl }: {
   data: ReportData
   showCols: readonly string[] | null
   sortByCol: string | null
+  title: string
+  sfUrl: string | null
 }) {
   // Filter to visible columns
   const colIndices = showCols
@@ -90,13 +92,30 @@ function ReportTable({ data, showCols, sortByCol }: {
     }
   }
 
+  const accent = theme.isProd ? "text-[#009688]" : "text-purple-600"
+
+  const tableHeader = (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-0.5">
+        <h2 className="text-base font-semibold text-gray-800">{title}</h2>
+        {sfUrl && (
+          <a href={sfUrl} target="_blank" rel="noopener noreferrer"
+            className={`inline-flex items-center gap-1 text-xs font-medium hover:underline ${accent}`}>
+            View in Salesforce <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+      <p className="text-xs text-gray-400">{data.total} record{data.total !== 1 ? "s" : ""}</p>
+    </div>
+  )
+
   if (!visibleRows.length) return (
-    <div className="text-center py-16 text-sm text-gray-400">No records found.</div>
+    <div>{tableHeader}<div className="text-center py-12 text-sm text-gray-400">No records found.</div></div>
   )
 
   return (
     <div className="overflow-x-auto">
-      <div className="text-xs text-gray-400 mb-2">{data.total} record{data.total !== 1 ? "s" : ""}</div>
+      {tableHeader}
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
@@ -130,14 +149,31 @@ function ReportTable({ data, showCols, sortByCol }: {
   )
 }
 
-function CasesTable({ data }: { data: CasesData }) {
-  if (!data.cases.length) return (
-    <div className="text-center py-16 text-sm text-gray-400">No open cases found.</div>
-  )
+function CasesTable({ data, sfUrl }: { data: CasesData; sfUrl: string | null }) {
   const accent = theme.isProd ? "text-[#00b4a2]" : "text-purple-700"
+  const sfAccent = theme.isProd ? "text-[#009688]" : "text-purple-600"
+
+  const tableHeader = (
+    <div className="mb-4">
+      <div className="flex items-center gap-2 mb-0.5">
+        <h2 className="text-base font-semibold text-gray-800">My Open Cases</h2>
+        {sfUrl && (
+          <a href={sfUrl} target="_blank" rel="noopener noreferrer"
+            className={`inline-flex items-center gap-1 text-xs font-medium hover:underline ${sfAccent}`}>
+            View in Salesforce <ExternalLink className="w-3 h-3" />
+          </a>
+        )}
+      </div>
+      <p className="text-xs text-gray-400">{data.total} record{data.total !== 1 ? "s" : ""}</p>
+    </div>
+  )
+
+  if (!data.cases.length) return (
+    <div>{tableHeader}<div className="text-center py-12 text-sm text-gray-400">No open cases found.</div></div>
+  )
   return (
     <div className="overflow-x-auto">
-      <div className="text-xs text-gray-400 mb-2">{data.total} record{data.total !== 1 ? "s" : ""}</div>
+      {tableHeader}
       <table className="w-full text-sm border-collapse">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
@@ -216,15 +252,7 @@ export default function SFReportsPage() {
             </div>
             <h1 className="text-2xl font-bold text-gray-900">SF Reports</h1>
           </div>
-          <div className="flex items-center gap-3 ml-12">
-            <p className="text-sm text-gray-500">Live Salesforce data — refreshes on tab switch.</p>
-            {tab.sfUrl && (
-              <a href={tab.sfUrl} target="_blank" rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1 text-xs font-medium hover:underline ${theme.isProd ? "text-[#009688]" : "text-purple-600"}`}>
-                View in Salesforce <ExternalLink className="w-3 h-3" />
-              </a>
-            )}
-          </div>
+          <p className="text-sm text-gray-500 ml-12">Live Salesforce data — refreshes on tab switch.</p>
         </div>
         <button
           onClick={() => fetchTab(activeTab, true)}
@@ -278,11 +306,11 @@ export default function SFReportsPage() {
         )}
 
         {!loading && current && !('error' in current) && tab.reportId && (
-          <ReportTable data={current as ReportData} showCols={tab.showCols} sortByCol={tab.sortByCol} />
+          <ReportTable data={current as ReportData} showCols={tab.showCols} sortByCol={tab.sortByCol} title={tab.label} sfUrl={tab.sfUrl} />
         )}
 
         {!loading && current && !('error' in current) && !tab.reportId && (
-          <CasesTable data={current as CasesData} />
+          <CasesTable data={current as CasesData} sfUrl={tab.sfUrl} />
         )}
       </div>
 
