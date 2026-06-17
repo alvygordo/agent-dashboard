@@ -3,7 +3,7 @@
 import React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList, BookOpen } from "lucide-react"
+import { Home, Layers, Bot, Sparkles, CheckSquare, ClipboardList, BookOpen, BarChart2 } from "lucide-react"
 import { theme } from "@/lib/theme"
 
 const navItems: { href: string; label: string; icon: React.ElementType; sandboxOnly?: boolean }[] = [
@@ -14,6 +14,7 @@ const navItems: { href: string; label: string; icon: React.ElementType; sandboxO
   { href: "/tasks",     label: "Tasks",          icon: CheckSquare },
   { href: "/nnr",       label: "NNR Tracker",    icon: ClipboardList },
   { href: "/kb",        label: "Knowledge Base", icon: BookOpen },
+  { href: "/sf-reports", label: "SF Reports",    icon: BarChart2 },
 ]
 
 export default function Sidebar() {

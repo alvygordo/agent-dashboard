@@ -186,6 +186,14 @@ export const tools: Tool[] = [
     kind: "gpt",
     status: "active",
   },
+  {
+    id: "w9-w8-repository-gpt",
+    name: "W-9 / W-8 Repository",
+    description: "Repository and assistant for W-9 and W-8 tax forms.",
+    url: "https://chatgpt.com/g/g-M7fDm3cfo-w-9-w-8-repository",
+    kind: "gpt",
+    status: "active",
+  },
 ]
 
 // kept for backwards-compat with workflow page

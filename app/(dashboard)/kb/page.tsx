@@ -43,6 +43,13 @@ const productKB = [
     url: "https://docs.google.com/spreadsheets/d/1bySzm2pHZK5p5ny9R44_YPUPlETRokNMLyCpj5J8bq4/edit?gid=839128997#gid=839128997",
     meta: "Google Sheets",
   },
+  {
+    type: "sheet" as const,
+    title: "Contracting Entities by Product",
+    description: "Reference sheet mapping contracting entities to their respective products.",
+    url: "https://docs.google.com/spreadsheets/d/1x7zyJjFALpeC3IE_zPKEcPfqjlYv3jaMmjsS1iXc1Rk/edit?gid=1213553245#gid=1213553245",
+    meta: "Google Sheets",
+  },
 ]
 
 const productRepo = [
@@ -78,6 +85,12 @@ const renewalsPlaybook = [
     description: "Core renewals playbook and Brainlifts documentation for the renewals team.",
     url: "https://drive.google.com/drive/folders/1x6RfqKV18c04VgyhetsrdMJyKc75Cu-I",
     meta: "Google Drive",
+  },
+  {
+    title: "Decommissioning Requests — Runbook",
+    description: "Step-by-step runbook for processing decommissioning requests.",
+    url: "https://docs.google.com/document/d/1SEm8qzIvN9l-k_pd5DF2ICPiqMqIux8-/edit",
+    meta: "Google Docs",
   },
 ]
 
