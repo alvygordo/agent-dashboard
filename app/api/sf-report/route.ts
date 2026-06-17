@@ -28,14 +28,15 @@ export async function GET(req: NextRequest) {
       method: 'GET',
       url:    `/services/data/v59.0/analytics/reports/${reportId}?includeDetails=true`,
     }) as {
-      reportMetadata: { detailColumns: string[]; reportFormat: string }
-      factMap:        Record<string, { rows?: SFRow[] }>
-      columns:        Record<string, { label: string; dataType: string }>
+      reportMetadata:         { detailColumns: string[]; reportFormat: string }
+      factMap:                Record<string, { rows?: SFRow[] }>
+      reportExtendedMetadata: { detailColumnInfo: Record<string, { label: string; dataType: string }> }
     }
 
-    const { reportMetadata, factMap, columns } = result
-    const colKeys  = reportMetadata.detailColumns ?? []
-    const headers  = colKeys.map(k => columns[k]?.label ?? k)
+    const { reportMetadata, factMap, reportExtendedMetadata } = result
+    const columnInfo = reportExtendedMetadata?.detailColumnInfo ?? {}
+    const colKeys    = reportMetadata.detailColumns ?? []
+    const headers    = colKeys.map(k => columnInfo[k]?.label ?? k)
 
     // Tabular reports: factMap["T!T"]
     const factKey  = Object.keys(factMap).find(k => factMap[k]?.rows) ?? 'T!T'
