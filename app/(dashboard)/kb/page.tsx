@@ -36,6 +36,13 @@ const productKB = [
     url: "https://docs.google.com/spreadsheets/d/1UPA6fqhpzpz-yp4XPIxzzGb8KdzlqRhm7l8g3whOeeA/edit?gid=809042891#gid=809042891",
     meta: "Google Sheets",
   },
+  {
+    type: "sheet" as const,
+    title: "Product Support Queues",
+    description: "Product support queue tracker.",
+    url: "https://docs.google.com/spreadsheets/d/1bySzm2pHZK5p5ny9R44_YPUPlETRokNMLyCpj5J8bq4/edit?gid=839128997#gid=839128997",
+    meta: "Google Sheets",
+  },
 ]
 
 const productRepo = [
