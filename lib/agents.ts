@@ -32,6 +32,13 @@ export type WorkflowStep = {
 // ─────────────────────────────────────────────────────────────
 export const agents: Agent[] = [
   {
+    id: "core-renewals",
+    name: "Core Renewals",
+    description: "Core Renewals Dashboard — manage and track renewal opportunities.",
+    url: "https://core-renewals-platform.vercel.app/",
+    status: "active",
+  },
+  {
     id: "contract-finder",
     name: "Contract Finder",
     description: "Search by opportunity name to find the most likely contract document.",
