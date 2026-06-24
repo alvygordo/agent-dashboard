@@ -23,7 +23,7 @@ const tabs = [
     label:      "Opps Stuck in Finalizing",
     reportId:   "00O2x0000046wN7EAI",
     sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00O2x0000046wN7EAI/view",
-    showCols:   null,
+    showCols:   ["sales ops", "opportunity name", "renewal date"],
     sortByCol:  "renewal date",
   },
   {
