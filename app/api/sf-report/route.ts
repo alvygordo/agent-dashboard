@@ -45,29 +45,45 @@ export async function GET(req: NextRequest) {
       if (entry?.rows?.length) allRows.push(...entry.rows)
     }
 
-    const oppNameColIdx = headers.findIndex(h => h.toLowerCase() === 'opportunity name')
+    const oppNameColIdx  = headers.findIndex(h => h.toLowerCase() === 'opportunity name')
+    const lastNameColIdx = headers.findIndex(h => h.toLowerCase() === 'last name')
+    const emailColIdx    = headers.findIndex(h => h.toLowerCase() === 'email')
 
-    // Collect unique opp names to resolve IDs via SOQL (needed because summary reports return opp name as plain string, no URL)
+    // Resolve Opportunity URLs via SOQL (summary reports return name as plain string, no URL)
     let oppNameToUrl: Record<string, string> = {}
     if (oppNameColIdx >= 0) {
       const names = [...new Set(
-        allRows
-          .map(r => r.dataCells[oppNameColIdx]?.label)
-          .filter((n): n is string => !!n && n !== '-')
+        allRows.map(r => r.dataCells[oppNameColIdx]?.label).filter((n): n is string => !!n && n !== '-')
       )]
       if (names.length) {
         const escaped = names.map(n => `'${n.replace(/'/g, "\\'")}'`).join(', ')
         type OppRecord = { Id: string; Name: string }
-        const soql = `SELECT Id, Name FROM Opportunity WHERE Name IN (${escaped}) LIMIT 500`
-        const oppResult = await conn.query<OppRecord>(soql)
+        const oppResult = await conn.query<OppRecord>(`SELECT Id, Name FROM Opportunity WHERE Name IN (${escaped}) LIMIT 500`)
         for (const opp of oppResult.records) {
           oppNameToUrl[opp.Name] = `${instanceUrl}/lightning/r/Opportunity/${opp.Id}/view`
         }
       }
     }
 
-    const rows = allRows.map((row: SFRow) =>
-      row.dataCells.map((cell: SFCell, idx: number) => {
+    // Resolve Contact URLs via email SOQL (Last Name field is plain text, no URL in SF Analytics API)
+    let emailToContactUrl: Record<string, string> = {}
+    if (lastNameColIdx >= 0 && emailColIdx >= 0) {
+      const emails = [...new Set(
+        allRows.map(r => r.dataCells[emailColIdx]?.label).filter((e): e is string => !!e && e !== '-' && e.includes('@'))
+      )]
+      if (emails.length) {
+        const escaped = emails.map(e => `'${e.replace(/'/g, "\\'")}'`).join(', ')
+        type ContactRecord = { Id: string; Email: string }
+        const contactResult = await conn.query<ContactRecord>(`SELECT Id, Email FROM Contact WHERE Email IN (${escaped}) LIMIT 500`)
+        for (const c of contactResult.records) {
+          emailToContactUrl[c.Email] = `${instanceUrl}/lightning/r/Contact/${c.Id}/view`
+        }
+      }
+    }
+
+    const rows = allRows.map((row: SFRow) => {
+      const rowEmail = emailColIdx >= 0 ? row.dataCells[emailColIdx]?.label : null
+      return row.dataCells.map((cell: SFCell, idx: number) => {
         if (cell.value && typeof cell.value === 'object' && 'url' in (cell.value as object)) {
           const rawUrl = (cell.value as { url: string }).url
           if (rawUrl) {
@@ -75,13 +91,15 @@ export async function GET(req: NextRequest) {
             return { label: cell.label, url: fullUrl }
           }
         }
-        // For opportunity name cells, use the SOQL-resolved URL
         if (idx === oppNameColIdx && cell.label && oppNameToUrl[cell.label]) {
           return { label: cell.label, url: oppNameToUrl[cell.label] }
         }
+        if (idx === lastNameColIdx && rowEmail && emailToContactUrl[rowEmail]) {
+          return { label: cell.label, url: emailToContactUrl[rowEmail] }
+        }
         return { label: cell.label ?? '', url: null }
       })
-    )
+    })
 
     return NextResponse.json({ headers, rows, total: rows.length })
   } catch (err: unknown) {

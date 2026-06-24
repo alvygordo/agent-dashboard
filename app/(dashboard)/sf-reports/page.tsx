@@ -21,9 +21,9 @@ const tabs = [
   },
   {
     label:      "Opps Stuck in Finalizing",
-    reportId:   "00O2x0000046wN7EAI",
-    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00O2x0000046wN7EAI/view",
-    showCols:   ["opportunity name", "renewal date", "close date", "win type"],
+    reportId:   "00Ofu000008iGinEAE",
+    sfUrl:      "https://trilogy-sales.lightning.force.com/lightning/r/Report/00Ofu000008iGinEAE/view",
+    showCols:   ["sales ops", "renewal date", "opportunity name", "opportunity owner", "stage duration", "win type", "loss reason"],
     sortByCol:  "renewal date",
   },
   {

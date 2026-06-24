@@ -63,13 +63,6 @@ export const agents: Agent[] = [
     status: "active",
   },
   {
-    id: "finalizing-closer",
-    name: "Finalizing-Closer Agent",
-    description: "Autonomously resolves opportunities stuck in the Finalizing stage in Salesforce. Completes blocking tasks, flags high-value items, and logs everything to a live monitoring dashboard.",
-    url: "https://trilogy-core-renewals-sales-ops.vercel.app/",
-    status: "active",
-  },
-  {
     id: "sf-agent",
     name: "SF Agent",
     description: "Read-only Salesforce lookup: search an Opportunity by name and view its renewal/subscription fields.",
@@ -84,6 +77,13 @@ export const agents: Agent[] = [
     name: "Contract Analyzer Agent",
     description: "Analyzes contract PDFs for a Salesforce opportunity, generates a Contract Report, updates 8 SF fields, and writes a journal summary.",
     url: "",
+    status: "active",
+  },
+  {
+    id: "finalizing-closer",
+    name: "Finalizing-Closer Agent",
+    description: "Autonomously resolves opportunities stuck in the Finalizing stage in Salesforce. Completes blocking tasks, flags high-value items, and logs everything to a live monitoring dashboard.",
+    url: "https://trilogy-core-renewals-sales-ops.vercel.app/",
     status: "active",
   },
 ]
@@ -182,6 +182,14 @@ export const tools: Tool[] = [
     name: "Khoros Deprovisioning",
     description: "Extract the Khoros instances required to process the Khoros Deprovisioning ticket.",
     url: "https://gemini.google.com/gem/2cc0ea7b4320",
+    kind: "gem",
+    status: "active",
+  },
+  {
+    id: "provisioning-assistant-gem",
+    name: "Provisioning Assistant",
+    description: "Assists with provisioning tasks and workflows.",
+    url: "https://gemini.google.com/gem/8c81a8f5a06f",
     kind: "gem",
     status: "active",
   },
