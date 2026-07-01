@@ -39,7 +39,7 @@ type OppData = {
   purchaseOrderLink: string | null
   netSuiteSubLink: string | null
   product: string | null
-  currentTerm: string | null
+  currentTerm: string | number | null
   currentArr: number | null
   renewalDate: string | null
   expiryDate: string | null
