@@ -310,7 +310,7 @@ export function QuoteReviewAnalysisReport({
       {docAnalysisLoading && (
         <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
           <Loader2 className="w-4 h-4 animate-spin" />
-          Analyzing PDFs from Salesforce…
+          Analyzing PDFs from Salesforce… usually 10–30 seconds for 2–3 documents.
         </div>
       )}
       {docAnalysisError && (

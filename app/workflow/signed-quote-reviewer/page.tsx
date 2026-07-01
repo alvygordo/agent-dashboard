@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
+import { useState, useEffect, useRef, Suspense } from "react"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import { theme } from "@/lib/theme"
@@ -131,6 +131,7 @@ function SignedQuoteReviewerInner() {
   const [docAnalysis, setDocAnalysis] = useState<DocumentAnalysisBundle | null>(null)
   const [docAnalysisLoading, setDocAnalysisLoading] = useState(false)
   const [docAnalysisError, setDocAnalysisError] = useState<string | null>(null)
+  const docFetchKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     setVisitedSteps((prev) => new Set(prev).add(step))
@@ -141,6 +142,7 @@ function SignedQuoteReviewerInner() {
       setDocAnalysis(null)
       setDocAnalysisError(null)
       setDocAnalysisLoading(false)
+      docFetchKeyRef.current = null
     }
   }, [step])
 
@@ -206,20 +208,33 @@ function SignedQuoteReviewerInner() {
     setDocError("")
     setDocAnalysis(null)
     setDocAnalysisError(null)
+    docFetchKeyRef.current = null
     setStep("analysis")
   }
 
   useEffect(() => {
     if (step !== "analysis" || !oppData) return
-    if (docAnalysis || docAnalysisLoading) return
+
+    const fetchKey = [
+      docs.unsignedQuoteUrl.trim(),
+      docs.signedQuoteUrl.trim(),
+      docs.purchaseOrderUrl.trim(),
+    ].join("|")
+
+    if (docAnalysis && docFetchKeyRef.current === fetchKey) return
 
     let cancelled = false
+    docFetchKeyRef.current = fetchKey
     setDocAnalysisLoading(true)
     setDocAnalysisError(null)
+
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 90_000)
 
     fetch("/api/sf-quote-documents", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
       body: JSON.stringify({
         unsignedQuoteUrl: docs.unsignedQuoteUrl,
         signedQuoteUrl: docs.signedQuoteUrl,
@@ -246,17 +261,31 @@ function SignedQuoteReviewerInner() {
         }
         setDocAnalysis(data as DocumentAnalysisBundle)
       })
-      .catch(() => {
-        if (!cancelled) setDocAnalysisError("Could not reach document analysis service")
+      .catch((err: unknown) => {
+        if (cancelled) return
+        if (err instanceof Error && err.name === "AbortError") {
+          setDocAnalysisError("PDF analysis timed out after 90 seconds — try again or open PDFs manually.")
+          return
+        }
+        setDocAnalysisError("Could not reach document analysis service")
       })
       .finally(() => {
+        clearTimeout(timeoutId)
         if (!cancelled) setDocAnalysisLoading(false)
       })
 
     return () => {
       cancelled = true
+      controller.abort()
     }
-  }, [step, oppData, docs, docAnalysis, docAnalysisLoading])
+  }, [
+    step,
+    oppData,
+    docs.unsignedQuoteUrl,
+    docs.signedQuoteUrl,
+    docs.purchaseOrderUrl,
+    docAnalysis,
+  ])
 
   async function copyTemplate() {
     if (!oppData) return

@@ -9,6 +9,8 @@ import {
 import { parseDocumentText } from '@/lib/quote-field-extract'
 import { connectSalesforce } from '@/lib/sf-connect'
 
+export const maxDuration = 60
+
 type AnalyzeRequest = {
   unsignedQuoteUrl: string
   signedQuoteUrl: string
