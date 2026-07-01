@@ -16,6 +16,7 @@ import {
   formatUsDate,
 } from "@/lib/sf-field-format"
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
+import { findHelpCenterForProduct, formatFulfillmentLine } from "@/lib/product-help-centers"
 import {
   ArrowRight,
   ArrowLeft,
@@ -67,7 +68,7 @@ const STEPS: { stepName: Step; label: string }[] = [
 
 const STEP_COUNT = STEPS.length
 
-function buildProvisioningTemplate(opp: OppData): string {
+function buildProvisioningTemplate(opp: OppData, helpCenter: ReturnType<typeof findHelpCenterForProduct>): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
   const months = formatTermMonthsOnly(opp.currentTerm)
@@ -103,6 +104,8 @@ function buildProvisioningTemplate(opp: OppData): string {
     `Contact person: ${contact}`,
     "Reason for request:",
     reason,
+    "",
+    formatFulfillmentLine(helpCenter, product !== "[Insert Product Name]" ? product : opp.product),
   ].join("\n")
 }
 
@@ -196,7 +199,7 @@ function SignedQuoteReviewerInner() {
 
   async function copyTemplate() {
     if (!oppData) return
-    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData))
+    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData, findHelpCenterForProduct(oppData.product)))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -210,7 +213,6 @@ function SignedQuoteReviewerInner() {
 
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
   const stepNumber = stepIndex + 1
-  const template = oppData ? buildProvisioningTemplate(oppData) : ""
   const analysis = oppData
     ? buildQuoteReviewAnalysis({
         winType: oppData.winType,
@@ -225,6 +227,8 @@ function SignedQuoteReviewerInner() {
         purchaseOrderUrl: docs.purchaseOrderUrl,
       })
     : null
+  const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
+  const template = oppData ? buildProvisioningTemplate(oppData, helpCenter) : ""
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -435,6 +439,7 @@ function SignedQuoteReviewerInner() {
               <QuoteReviewAnalysisReport
                 analysis={analysis}
                 docs={docs}
+                helpCenter={helpCenter}
                 opp={{
                   name: oppData.name,
                   accountName: oppData.accountName,
@@ -469,6 +474,31 @@ function SignedQuoteReviewerInner() {
               <p className="text-sm text-gray-500 mt-1">
                 Copy and paste into your provisioning ticket.
               </p>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+              <h3 className="font-semibold text-gray-900">Support queue</h3>
+              {helpCenter ? (
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 space-y-2">
+                  <p className="text-sm text-gray-700">
+                    Open a provisioning ticket in the <strong>{helpCenter.name}</strong> help center
+                    {helpCenter.bu ? ` (${helpCenter.bu})` : ""}.
+                  </p>
+                  <a
+                    href={helpCenter.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-2 rounded-lg ${theme.btnPrimary} px-4 py-2.5 text-sm font-medium cursor-pointer`}
+                  >
+                    Open support queue
+                    <ExternalLink className="w-4 h-4" />
+                  </a>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+                  No help center match for product &quot;{oppData.product ?? "—"}&quot;. Check Product Help Centers in KB.
+                </div>
+              )}
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
