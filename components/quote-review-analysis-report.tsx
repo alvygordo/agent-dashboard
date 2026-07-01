@@ -10,7 +10,6 @@ import {
   type QuoteReviewAnalysis,
 } from "@/lib/quote-review-analysis"
 import { formatUsDate } from "@/lib/sf-field-format"
-import type { ProductHelpCenter } from "@/lib/product-help-centers"
 import { ExternalLink, FileText } from "lucide-react"
 
 type OppSummary = {
@@ -167,12 +166,10 @@ export function QuoteReviewAnalysisReport({
   analysis,
   opp,
   docs,
-  helpCenter,
 }: {
   analysis: QuoteReviewAnalysis
   opp: OppSummary
   docs: DocLinks
-  helpCenter: ProductHelpCenter | null
 }) {
   const byCategory = (cat: AnalysisFlag["category"]) =>
     analysis.flags.filter((f) => f.category === cat)
@@ -255,31 +252,6 @@ export function QuoteReviewAnalysisReport({
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Entry gate</h3>
         <FlagTable flags={byCategory("gate")} />
-      </section>
-
-      {/* Support queue routing */}
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Support queue routing</h3>
-        {helpCenter ? (
-          <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-            <div>
-              <p className="font-medium text-gray-900">{helpCenter.name}</p>
-              <p className="text-sm text-gray-600">{helpCenter.bu} · {helpCenter.url}</p>
-            </div>
-            <a
-              href={helpCenter.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center justify-center gap-2 rounded-lg ${theme.btnPrimary} px-4 py-2 text-sm font-medium shrink-0 cursor-pointer`}
-            >
-              Open queue <ExternalLink className="w-4 h-4" />
-            </a>
-          </div>
-        ) : (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            No help center match for product &quot;{opp.product ?? "—"}&quot;. Check Product Help Centers in KB.
-          </div>
-        )}
       </section>
 
       {/* Salesforce alignment */}

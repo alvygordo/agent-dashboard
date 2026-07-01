@@ -437,7 +437,6 @@ function SignedQuoteReviewerInner() {
               <QuoteReviewAnalysisReport
                 analysis={analysis}
                 docs={docs}
-                helpCenter={helpCenter}
                 opp={{
                   name: oppData.name,
                   accountName: oppData.accountName,
