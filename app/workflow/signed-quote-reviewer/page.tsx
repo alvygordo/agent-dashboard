@@ -16,7 +16,7 @@ import {
   formatUsDate,
 } from "@/lib/sf-field-format"
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
-import { findHelpCenterForProduct, formatFulfillmentLine } from "@/lib/product-help-centers"
+import { findHelpCenterForProduct } from "@/lib/product-help-centers"
 import {
   ArrowRight,
   ArrowLeft,
@@ -68,7 +68,7 @@ const STEPS: { stepName: Step; label: string }[] = [
 
 const STEP_COUNT = STEPS.length
 
-function buildProvisioningTemplate(opp: OppData, helpCenter: ReturnType<typeof findHelpCenterForProduct>): string {
+function buildProvisioningTemplate(opp: OppData): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
   const months = formatTermMonthsOnly(opp.currentTerm)
@@ -104,8 +104,6 @@ function buildProvisioningTemplate(opp: OppData, helpCenter: ReturnType<typeof f
     `Contact person: ${contact}`,
     "Reason for request:",
     reason,
-    "",
-    formatFulfillmentLine(helpCenter, product !== "[Insert Product Name]" ? product : opp.product),
   ].join("\n")
 }
 
@@ -199,7 +197,7 @@ function SignedQuoteReviewerInner() {
 
   async function copyTemplate() {
     if (!oppData) return
-    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData, findHelpCenterForProduct(oppData.product)))
+    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -228,7 +226,7 @@ function SignedQuoteReviewerInner() {
       })
     : null
   const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
-  const template = oppData ? buildProvisioningTemplate(oppData, helpCenter) : ""
+  const template = oppData ? buildProvisioningTemplate(oppData) : ""
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
