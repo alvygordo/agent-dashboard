@@ -198,14 +198,29 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
 
   const renewal = input.renewalDate ? new Date(`${input.renewalDate}T12:00:00`) : null
   const expiry = input.expiryDate ? new Date(`${input.expiryDate}T12:00:00`) : null
-  if (renewal && expiry && !Number.isNaN(renewal.getTime()) && !Number.isNaN(expiry.getTime()) && expiry < renewal) {
-    flags.push({
-      id: 'date-order',
-      label: 'Renewal vs expiry dates',
-      detail: `Expiry ${formatUsDate(input.expiryDate)} is before renewal ${formatUsDate(input.renewalDate)} — confirm on contract.`,
-      severity: 'warn',
-      category: 'salesforce',
-    })
+  if (
+    renewal && expiry
+    && !Number.isNaN(renewal.getTime())
+    && !Number.isNaN(expiry.getTime())
+  ) {
+    const dayGap = Math.round((renewal.getTime() - expiry.getTime()) / 86_400_000)
+    if (dayGap === 1) {
+      flags.push({
+        id: 'date-order',
+        label: 'Renewal vs expiry dates',
+        detail: `Renewal (${formatUsDate(input.renewalDate)}) is the day after expiry (${formatUsDate(input.expiryDate)}) — expected pattern.`,
+        severity: 'pass',
+        category: 'salesforce',
+      })
+    } else {
+      flags.push({
+        id: 'date-order',
+        label: 'Renewal vs expiry dates',
+        detail: `Renewal (${formatUsDate(input.renewalDate)}) and expiry (${formatUsDate(input.expiryDate)}) are ${dayGap} days apart — expected renewal = expiry + 1 day.`,
+        severity: 'warn',
+        category: 'salesforce',
+      })
+    }
   }
 
   const worst = worstSeverity(flags)

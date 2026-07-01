@@ -6,11 +6,10 @@ import {
   severityLabel,
   type AnalysisFlag,
   type AnalysisSeverity,
-  type AnalysisSummary,
   type QuoteReviewAnalysis,
 } from "@/lib/quote-review-analysis"
 import { formatUsDate } from "@/lib/sf-field-format"
-import { ExternalLink, FileText } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 
 type OppSummary = {
   name: string
@@ -83,54 +82,53 @@ function FlagTable({ flags }: { flags: AnalysisFlag[] }) {
 function DocCompareColumn({
   title,
   subtitle,
+  linkLabel,
   href,
   status,
 }: {
   title: string
   subtitle: string
+  linkLabel: string
   href: string
   status: AnalysisSeverity
 }) {
   return (
-    <div className="flex flex-col h-full rounded-lg border border-gray-200 bg-white overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 px-4 py-3">
+    <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
+      <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
         <p className="text-sm font-medium text-gray-900 mt-0.5">{subtitle}</p>
-      </div>
-      <div className="p-4 flex-1 flex flex-col gap-4">
         <a
           href={href}
           target="_blank"
           rel="noopener noreferrer"
-          className={`inline-flex items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 px-4 py-8 text-sm font-medium text-gray-800 hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer`}
+          className={`inline-flex items-center gap-1 text-sm mt-1.5 ${theme.accent} hover:underline cursor-pointer`}
         >
-          <FileText className="w-5 h-5 text-gray-400" />
-          Open document
-          <ExternalLink className={`w-4 h-4 ${theme.accent}`} />
+          {linkLabel}
+          <ExternalLink className="w-3.5 h-3.5" />
         </a>
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Link status</p>
-          <SeverityBadge severity={status} />
-        </div>
-        <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Verify on PDF</p>
-          <ul className="text-xs text-gray-600 space-y-1.5">
-            {COMPARE_CHECKLIST.map((item) => (
-              <li key={item} className="flex items-start gap-2">
-                <span className="text-gray-300 mt-0.5">☐</span>
-                {item}
-              </li>
-            ))}
-          </ul>
-        </div>
+      </div>
+      <div className="flex items-center gap-2 text-xs">
+        <span className="text-gray-500">Link status</span>
+        <SeverityBadge severity={status} />
+      </div>
+      <div>
+        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Verify on PDF</p>
+        <ul className="text-xs text-gray-600 space-y-1">
+          {COMPARE_CHECKLIST.map((item) => (
+            <li key={item} className="flex items-start gap-2">
+              <span className="text-gray-300">☐</span>
+              {item}
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   )
 }
 
-function SfCompareTable({ opp }: { opp: OppSummary }) {
+function SfReferenceTable({ opp }: { opp: OppSummary }) {
   const rows = [
-    { field: "Win Type", value: opp.winType ?? "—", note: !opp.winType ? "Expected Quote Signed or PO Received" : undefined },
+    { field: "Win Type", value: opp.winType ?? "—" },
     { field: "Product", value: opp.product ?? "—" },
     { field: "Support plan", value: opp.supportPlan ?? "—" },
     { field: "Users / seats", value: opp.userCount != null ? String(opp.userCount) : "—" },
@@ -143,9 +141,8 @@ function SfCompareTable({ opp }: { opp: OppSummary }) {
       <table className="w-full text-sm">
         <thead className="bg-gray-50 border-b border-gray-200">
           <tr>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[24%]">Salesforce field</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[24%]">Value</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Notes</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[40%]">Opportunity field</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Value from Salesforce</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 bg-white">
@@ -153,7 +150,6 @@ function SfCompareTable({ opp }: { opp: OppSummary }) {
             <tr key={row.field}>
               <td className="px-4 py-2.5 font-medium text-gray-900">{row.field}</td>
               <td className="px-4 py-2.5 text-gray-800">{row.value}</td>
-              <td className="px-4 py-2.5 text-gray-500">{row.note ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -186,14 +182,12 @@ export function QuoteReviewAnalysisReport({
 
   return (
     <div className="space-y-8">
-      {/* Report header */}
       <div className="border-b border-gray-200 pb-6">
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Signed Quote Review Report</p>
         <h2 className="text-xl font-bold text-gray-900 mt-1">{opp.name}</h2>
         <p className="text-sm text-gray-500 mt-1">{opp.accountName ?? "—"} · {opp.product ?? "—"}</p>
       </div>
 
-      {/* Verdict */}
       <div className={`border-l-4 rounded-r-lg px-5 py-4 ${verdictClass}`}>
         <p className="text-xs font-bold uppercase tracking-wide text-gray-600">
           {analysisSummaryLabel(analysis.summary)}
@@ -201,22 +195,23 @@ export function QuoteReviewAnalysisReport({
         <p className="text-base font-medium text-gray-900 mt-1">{analysis.recommendation}</p>
       </div>
 
-      {/* Side-by-side quote comparison */}
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quote comparison</h3>
-          <p className="text-xs text-gray-500 mt-1">Open both documents side by side and work through the checklist.</p>
+          <p className="text-xs text-gray-500 mt-1">Open both PDFs and confirm the signed quote matches the unsigned baseline.</p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <DocCompareColumn
             title="Baseline"
             subtitle="Unsigned quote"
+            linkLabel="Open unsigned quote"
             href={docs.unsignedQuoteUrl}
             status={unsignedStatus}
           />
           <DocCompareColumn
             title="Customer signed"
             subtitle="Signed quote"
+            linkLabel="Open signed quote"
             href={docs.signedQuoteUrl}
             status={signedStatus}
           />
@@ -224,7 +219,6 @@ export function QuoteReviewAnalysisReport({
         <FlagTable flags={byCategory("manual").filter((f) => f.id === "pdf-diff")} />
       </section>
 
-      {/* PO */}
       {(docs.purchaseOrderUrl || byCategory("documents").some((f) => f.id.startsWith("po"))) && (
         <section className="space-y-3">
           <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Purchase order</h3>
@@ -233,10 +227,10 @@ export function QuoteReviewAnalysisReport({
               href={docs.purchaseOrderUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-between rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium hover:border-purple-400 hover:bg-purple-50 cursor-pointer"
+              className={`inline-flex items-center gap-1 text-sm ${theme.accent} hover:underline cursor-pointer`}
             >
-              <span>Open purchase order</span>
-              <ExternalLink className={`w-4 h-4 ${theme.accent}`} />
+              Open purchase order
+              <ExternalLink className="w-3.5 h-3.5" />
             </a>
           ) : null}
           <FlagTable
@@ -248,16 +242,19 @@ export function QuoteReviewAnalysisReport({
         </section>
       )}
 
-      {/* Entry gate */}
       <section className="space-y-3">
         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Entry gate</h3>
         <FlagTable flags={byCategory("gate")} />
       </section>
 
-      {/* Salesforce alignment */}
       <section className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Salesforce alignment</h3>
-        <SfCompareTable opp={opp} />
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Salesforce reference</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            Values pulled from the opportunity for the provisioning template. When you review the PDFs, confirm these match the signed quote — this is not an automated check yet.
+          </p>
+        </div>
+        <SfReferenceTable opp={opp} />
         <FlagTable flags={byCategory("salesforce")} />
       </section>
     </div>
