@@ -469,14 +469,41 @@ function SignedQuoteReviewerInner() {
               <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of {STEP_COUNT}</Badge>
               <h2 className="text-2xl font-bold text-gray-900">Provisioning Template</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Copy and paste into your provisioning ticket.
+                Copy the template below, then open the support queue to raise your provisioning ticket.
               </p>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-              <h3 className="font-semibold text-gray-900">Support queue</h3>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Step 1</p>
+                <h3 className="font-semibold text-gray-900 mt-1">Copy the provisioning template</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Click <strong>Copy template</strong> and keep it on your clipboard — you will paste it into the support ticket in the next step.
+                </p>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-gray-500 truncate">{oppData.name}</p>
+                <Button variant="outline" size="sm" onClick={copyTemplate} className="cursor-pointer shrink-0">
+                  {copied ? (
+                    <><Check className="w-3 h-3 mr-1 text-green-600" /> Copied</>
+                  ) : (
+                    <><Copy className="w-3 h-3 mr-1" /> Copy template</>
+                  )}
+                </Button>
+              </div>
+              <Textarea readOnly value={template} rows={18} className="font-mono text-xs bg-gray-50" />
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Step 2</p>
+                <h3 className="font-semibold text-gray-900 mt-1">Open the support queue and raise a ticket</h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Open the product help center below, follow their instructions to create a provisioning ticket, and paste the template you copied above into the ticket.
+                </p>
+              </div>
               {helpCenter ? (
-                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 space-y-2">
+                <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-4 space-y-3">
                   <p className="text-sm text-gray-700">
                     Open a provisioning ticket in the <strong>{helpCenter.name}</strong> help center
                     {helpCenter.bu ? ` (${helpCenter.bu})` : ""}.
@@ -493,23 +520,9 @@ function SignedQuoteReviewerInner() {
                 </div>
               ) : (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  No help center match for product &quot;{oppData.product ?? "—"}&quot;. Check Product Help Centers in KB.
+                  No help center match for product &quot;{oppData.product ?? "—"}&quot;. Check Product Help Centers in KB, then paste the template into the correct queue.
                 </div>
               )}
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-600">{oppData.name}</p>
-                <Button variant="outline" size="sm" onClick={copyTemplate} className="cursor-pointer">
-                  {copied ? (
-                    <><Check className="w-3 h-3 mr-1 text-green-600" /> Copied</>
-                  ) : (
-                    <><Copy className="w-3 h-3 mr-1" /> Copy template</>
-                  )}
-                </Button>
-              </div>
-              <Textarea readOnly value={template} rows={18} className="font-mono text-xs bg-gray-50" />
             </div>
 
             <div className="flex gap-3">
