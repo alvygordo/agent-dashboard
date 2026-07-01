@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  fieldOrPlaceholder,
   formatContactLine,
   formatTermLabel,
   formatTermMonthsOnly,
@@ -44,7 +45,9 @@ type OppData = {
   renewalDate: string | null
   expiryDate: string | null
   autoRenewal: string | null
-  primaryContact: { name: string; email: string | null; display?: string } | null
+  supportPlan: string | null
+  userCount: number | null
+  primaryContact: { name: string; email: string | null; display?: string; isPrimary?: boolean } | null
   oppUrl: string
 }
 
@@ -73,6 +76,10 @@ function buildProvisioningTemplate(opp: OppData): string {
   const renewal = formatUsDate(opp.renewalDate)
   const expiry = formatUsDate(opp.expiryDate)
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
+  const supportPlan = fieldOrPlaceholder(opp.supportPlan, "[Insert Standard, Gold, or Platinum]")
+  const userCount = opp.userCount != null && opp.userCount > 0
+    ? String(opp.userCount)
+    : "[Insert User/Seat Count]"
   const reason =
     opp.winType === "PO Received"
       ? `Customer is renewing for ${termLabel}`
@@ -86,8 +93,8 @@ function buildProvisioningTemplate(opp: OppData): string {
     `Netsuite subscription: ${nsLink}`,
     `Salesforce opportunity: ${opp.oppUrl}`,
     `Product: ${product}`,
-    "Support plan: [Insert Standard, Gold, or Platinum]",
-    "Number of users: [Insert User/Seat Count]",
+    `Support plan: ${supportPlan}`,
+    `Number of users: ${userCount}`,
     `Renewal Date: ${renewal}`,
     `Expiry Date: ${expiry}`,
     `Auto-Renewal: ${autoRenew}`,
@@ -447,11 +454,18 @@ function SignedQuoteReviewerInner() {
                 <div><dt className="text-gray-500">Account</dt><dd>{oppData.accountName ?? "—"}</dd></div>
                 <div><dt className="text-gray-500">Win Type</dt><dd>{oppData.winType ?? "—"}</dd></div>
                 <div><dt className="text-gray-500">Product</dt><dd>{oppData.product ?? "—"}</dd></div>
+                <div><dt className="text-gray-500">Support plan</dt><dd>{oppData.supportPlan ?? "—"}</dd></div>
+                <div><dt className="text-gray-500">Users / seats</dt><dd>{oppData.userCount ?? "—"}</dd></div>
                 <div><dt className="text-gray-500">Term</dt><dd>{oppData.currentTerm ?? "—"}</dd></div>
                 <div><dt className="text-gray-500">Primary contact</dt>
                   <dd>
                     {oppData.primaryContact?.display
                       ?? formatContactLine(oppData.primaryContact)}
+                    {oppData.primaryContact?.email?.includes(".data") && (
+                      <span className="block text-xs text-amber-600 mt-0.5">
+                        Sandbox org masks real contact emails — use prod or enter manually.
+                      </span>
+                    )}
                   </dd>
                 </div>
               </dl>

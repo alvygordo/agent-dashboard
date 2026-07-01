@@ -3,27 +3,18 @@ import jsforce, { type Connection } from 'jsforce'
 import {
   extractUrlFromSfField,
   formatContactLine,
+  parseSupportPlanFromLines,
+  parseUserCountFromLines,
   toLightningBaseUrl,
 } from '@/lib/sf-field-format'
 
 const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
 
-type OppRow = {
+type OppRow = Record<string, unknown> & {
   Id: string
   Name: string
   StageName?: string
   CloseDate?: string
-  Win_Type__c?: string | null
-  Signed_Quote__c?: string | null
-  Purchase_Order_Link__c?: string | null
-  NetSuite_Sub_Link__c?: string | null
-  Current_ARR__c?: number | null
-  Current_Term__c?: string | null
-  Current_Billing_Term__c?: string | null
-  Product__c?: string | null
-  Renewal_Date__c?: string | null
-  Current_Subscription_End_Date__c?: string | null
-  CurrentContractHasAutoRenewalClause__c?: string | null
   Account?: { Name?: string } | null
   Owner?: { Name?: string } | null
 }
@@ -31,7 +22,7 @@ type OppRow = {
 const BASE_FIELDS = [
   'Id', 'Name', 'StageName', 'CloseDate',
   'Account.Name', 'Owner.Name',
-].join(', ')
+]
 
 const QUOTE_REVIEW_FIELDS = [
   'Win_Type__c',
@@ -45,6 +36,40 @@ const QUOTE_REVIEW_FIELDS = [
   'Renewal_Date__c',
   'Current_Subscription_End_Date__c',
   'CurrentContractHasAutoRenewalClause__c',
+  'SBQQ__PrimaryQuote__c',
+]
+
+const OPTIONAL_OPP_FIELDS = [
+  'Support_Plan__c',
+  'Success_Plan__c',
+  'Service_Level__c',
+  'Current_Support_Plan__c',
+  'Entitlement__c',
+  'Support_Tier__c',
+  'Number_of_Users__c',
+  'User_Count__c',
+  'Total_Users__c',
+  'Seat_Count__c',
+  'Current_User_Count__c',
+  'Licensed_Users__c',
+]
+
+const SUPPORT_FIELD_KEYS = [
+  'Support_Plan__c',
+  'Success_Plan__c',
+  'Service_Level__c',
+  'Current_Support_Plan__c',
+  'Entitlement__c',
+  'Support_Tier__c',
+]
+
+const USER_COUNT_FIELD_KEYS = [
+  'Number_of_Users__c',
+  'User_Count__c',
+  'Total_Users__c',
+  'Seat_Count__c',
+  'Current_User_Count__c',
+  'Licensed_Users__c',
 ]
 
 function sfLoginUrl() {
@@ -80,46 +105,107 @@ function lightningBaseFromConn(conn: Connection): string {
 }
 
 async function queryOpp(conn: Connection, where: string): Promise<OppRow[]> {
-  const fullSelect = `SELECT ${BASE_FIELDS}, ${QUOTE_REVIEW_FIELDS.join(', ')} FROM Opportunity ${where}`
+  const fieldSets = [
+    [...BASE_FIELDS, ...QUOTE_REVIEW_FIELDS, ...OPTIONAL_OPP_FIELDS],
+    [...BASE_FIELDS, ...QUOTE_REVIEW_FIELDS],
+    BASE_FIELDS,
+  ]
+  for (const fields of fieldSets) {
+    try {
+      const result = await conn.query<OppRow>(
+        `SELECT ${fields.join(', ')} FROM Opportunity ${where}`,
+      )
+      return result.records
+    } catch {
+      // try fewer fields
+    }
+  }
+  return []
+}
+
+function firstFieldValue(opp: OppRow, keys: string[]): unknown {
+  for (const key of keys) {
+    const val = opp[key]
+    if (val != null && String(val).trim() !== '') return val
+  }
+  return null
+}
+
+type QuoteLineRow = {
+  SBQQ__ProductName__c?: string
+  SBQQ__Quantity__c?: number | null
+}
+
+async function fetchQuoteLines(conn: Connection, quoteId: string) {
   try {
-    const result = await conn.query<OppRow>(fullSelect)
-    return result.records
+    const safeId = quoteId.replace(/'/g, "\\'")
+    const result = await conn.query<QuoteLineRow>(
+      `SELECT SBQQ__ProductName__c, SBQQ__Quantity__c
+       FROM SBQQ__QuoteLine__c
+       WHERE SBQQ__Quote__c = '${safeId}'
+       AND (SBQQ__Bundled__c = false OR SBQQ__Bundled__c = null)
+       ORDER BY SBQQ__Number__c ASC`,
+    )
+    return result.records.map((r) => ({
+      productName: r.SBQQ__ProductName__c ?? '',
+      quantity: r.SBQQ__Quantity__c ?? null,
+    })).filter((l) => l.productName)
   } catch {
-    const result = await conn.query<OppRow>(`SELECT ${BASE_FIELDS} FROM Opportunity ${where}`)
-    return result.records
+    return []
   }
 }
 
-async function primaryContact(conn: Connection, oppId: string) {
-  type RoleRow = { Contact?: { Name?: string; Email?: string } | null }
+async function bestContact(conn: Connection, oppId: string) {
+  type RoleRow = {
+    Contact?: { Name?: string; Email?: string } | null
+    IsPrimary?: boolean
+  }
   try {
     const result = await conn.query<RoleRow>(
-      `SELECT Contact.Name, Contact.Email FROM OpportunityContactRole
-       WHERE OpportunityId = '${oppId.replace(/'/g, "\\'")}' AND IsPrimary = true
-       LIMIT 1`,
+      `SELECT Contact.Name, Contact.Email, IsPrimary
+       FROM OpportunityContactRole
+       WHERE OpportunityId = '${oppId.replace(/'/g, "\\'")}'
+       ORDER BY IsPrimary DESC, CreatedDate ASC
+       LIMIT 10`,
     )
-    const contact = result.records[0]?.Contact
-    if (!contact?.Name) return null
+    const roles = result.records.filter((r) => r.Contact?.Name)
+    if (roles.length === 0) return null
+
+    const withEmail = roles.find((r) => r.Contact?.Email?.trim())
+    const pick = withEmail ?? roles[0]
     return {
-      name: contact.Name,
-      email: contact.Email ?? null,
+      name: pick.Contact!.Name!,
+      email: pick.Contact?.Email?.trim() ?? null,
+      isPrimary: pick.IsPrimary === true,
     }
   } catch {
     return null
   }
 }
 
-function mapOpp(
+async function mapOpp(
+  conn: Connection,
   opp: OppRow,
-  primary: { name: string; email: string | null } | null,
   lightningBase: string,
 ) {
-  const winType = opp.Win_Type__c ?? null
+  const winType = (opp.Win_Type__c as string | null) ?? null
+  const product = (opp.Product__c as string | null) ?? null
+  const primaryQuoteId = (opp.SBQQ__PrimaryQuote__c as string | null) ?? null
+
+  const quoteLines = primaryQuoteId ? await fetchQuoteLines(conn, primaryQuoteId) : []
+  const supportFromQuote = parseSupportPlanFromLines(quoteLines)
+  const usersFromQuote = parseUserCountFromLines(quoteLines, product)
+
+  const supportFromOpp = firstFieldValue(opp, SUPPORT_FIELD_KEYS)
+  const usersFromOpp = firstFieldValue(opp, USER_COUNT_FIELD_KEYS)
+
+  const contact = await bestContact(conn, opp.Id)
+
   return {
     id: opp.Id,
     name: opp.Name,
-    stage: opp.StageName ?? null,
-    closeDate: opp.CloseDate ?? null,
+    stage: (opp.StageName as string | null) ?? null,
+    closeDate: (opp.CloseDate as string | null) ?? null,
     accountName: opp.Account?.Name ?? null,
     ownerName: opp.Owner?.Name ?? null,
     winType,
@@ -127,14 +213,21 @@ function mapOpp(
     signedQuoteUrl: extractUrlFromSfField(opp.Signed_Quote__c),
     purchaseOrderLink: extractUrlFromSfField(opp.Purchase_Order_Link__c),
     netSuiteSubLink: extractUrlFromSfField(opp.NetSuite_Sub_Link__c),
-    product: opp.Product__c ?? null,
-    currentTerm: opp.Current_Term__c ?? opp.Current_Billing_Term__c ?? null,
-    currentArr: opp.Current_ARR__c ?? null,
-    renewalDate: opp.Renewal_Date__c ?? null,
-    expiryDate: opp.Current_Subscription_End_Date__c ?? null,
-    autoRenewal: opp.CurrentContractHasAutoRenewalClause__c ?? null,
-    primaryContact: primary
-      ? { name: primary.name, email: primary.email, display: formatContactLine(primary) }
+    product,
+    currentTerm: (opp.Current_Term__c ?? opp.Current_Billing_Term__c) ?? null,
+    currentArr: (opp.Current_ARR__c as number | null) ?? null,
+    renewalDate: (opp.Renewal_Date__c as string | null) ?? null,
+    expiryDate: (opp.Current_Subscription_End_Date__c as string | null) ?? null,
+    autoRenewal: (opp.CurrentContractHasAutoRenewalClause__c as string | null) ?? null,
+    supportPlan: supportFromQuote ?? (supportFromOpp != null ? String(supportFromOpp) : null),
+    userCount: usersFromQuote ?? (usersFromOpp != null ? Number(usersFromOpp) : null),
+    primaryContact: contact
+      ? {
+          name: contact.name,
+          email: contact.email,
+          isPrimary: contact.isPrimary,
+          display: formatContactLine({ name: contact.name, email: contact.email }),
+        }
       : null,
     oppUrl: `${lightningBase}/lightning/r/Opportunity/${opp.Id}/view`,
   }
@@ -171,7 +264,7 @@ export async function GET(req: NextRequest) {
     }
 
     const mapped = await Promise.all(
-      records.map(async (opp) => mapOpp(opp, await primaryContact(conn, opp.Id), lightningBase)),
+      records.map((opp) => mapOpp(conn, opp, lightningBase)),
     )
 
     return NextResponse.json({

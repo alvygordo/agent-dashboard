@@ -106,6 +106,18 @@ export const workflows: Workflow[] = [
     ],
   },
   {
+    id: "signed-quote-reviewer",
+    name: "Signed Quote Reviewer",
+    description: "Validate signed quote documents against Salesforce — paste doc links, review flags, and generate a provisioning template.",
+    status: "active",
+    sandboxOnly: true,
+    steps: [
+      { agentId: "sf-agent", label: "Opportunity Lookup", requiresConfirmation: false },
+      { agentId: "contract-finder", label: "Document Links", requiresConfirmation: false },
+      { agentId: "provisioning-assistant-gem", label: "Review & Template", requiresConfirmation: false },
+    ],
+  },
+  {
     id: "opp-prep-automation",
     name: "Opp Prep Automation",
     description: "Full automated renewal analysis — contract data, NS data, SF data, and comparison summary.",
@@ -122,18 +134,6 @@ export const workflows: Workflow[] = [
         label: "Step 2: NS Agent",
         requiresConfirmation: false,
       },
-    ],
-  },
-  {
-    id: "signed-quote-reviewer",
-    name: "Signed Quote Reviewer",
-    description: "Validate signed quote documents against Salesforce — paste doc links, review flags, and generate a provisioning template.",
-    status: "active",
-    sandboxOnly: true,
-    steps: [
-      { agentId: "sf-agent", label: "Opportunity Lookup", requiresConfirmation: false },
-      { agentId: "contract-finder", label: "Document Links", requiresConfirmation: false },
-      { agentId: "provisioning-assistant-gem", label: "Review & Template", requiresConfirmation: false },
     ],
   },
   {
