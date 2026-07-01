@@ -125,6 +125,18 @@ export const workflows: Workflow[] = [
     ],
   },
   {
+    id: "signed-quote-reviewer",
+    name: "Signed Quote Reviewer",
+    description: "Validate signed quote documents against Salesforce — paste doc links, review flags, and generate a provisioning template.",
+    status: "active",
+    sandboxOnly: true,
+    steps: [
+      { agentId: "sf-agent", label: "Opportunity Lookup", requiresConfirmation: false },
+      { agentId: "contract-finder", label: "Document Links", requiresConfirmation: false },
+      { agentId: "provisioning-assistant-gem", label: "Review & Template", requiresConfirmation: false },
+    ],
+  },
+  {
     id: "contract-to-opp",
     name: "Opp Prep Assistant",
     description: "Find the correct contract, confirm it, then launch Opp Prep AI.",
