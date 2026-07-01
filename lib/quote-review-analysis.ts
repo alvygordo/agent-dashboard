@@ -2,11 +2,14 @@ import { formatUsDate } from '@/lib/sf-field-format'
 
 export type AnalysisSeverity = 'pass' | 'warn' | 'fail' | 'pending'
 
+export type AnalysisCategory = 'gate' | 'documents' | 'manual' | 'salesforce'
+
 export type AnalysisFlag = {
   id: string
   label: string
   detail: string
   severity: AnalysisSeverity
+  category: AnalysisCategory
 }
 
 export type AnalysisSummary = 'accept' | 'review' | 'hold'
@@ -55,6 +58,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Win Type not set',
       detail: 'Opportunity Win Type is blank. Expected Quote Signed or PO Received before accepting the signed quote.',
       severity: 'warn',
+      category: 'gate',
     })
   } else if (!VALID_WIN_TYPES.has(input.winType)) {
     flags.push({
@@ -62,6 +66,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Win Type gate',
       detail: `Win Type is "${input.winType}". This workflow is for Quote Signed or PO Received only.`,
       severity: 'fail',
+      category: 'gate',
     })
   } else {
     flags.push({
@@ -69,6 +74,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Win Type',
       detail: `${input.winType} — eligible for signed quote review.`,
       severity: 'pass',
+      category: 'gate',
     })
   }
 
@@ -78,6 +84,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Unsigned quote',
       detail: 'Baseline document link provided.',
       severity: 'pass',
+      category: 'documents',
     })
   } else {
     flags.push({
@@ -85,6 +92,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Unsigned quote missing',
       detail: 'Add the unsigned baseline quote link.',
       severity: 'fail',
+      category: 'documents',
     })
   }
 
@@ -94,6 +102,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Signed quote',
       detail: 'Customer signed document link provided.',
       severity: 'pass',
+      category: 'documents',
     })
   } else {
     flags.push({
@@ -101,6 +110,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Signed quote missing',
       detail: 'Add the signed quote link.',
       severity: 'fail',
+      category: 'documents',
     })
   }
 
@@ -110,6 +120,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'Purchase order',
       detail: 'PO document link provided — confirm pricing and scope match the signed quote.',
       severity: 'pass',
+      category: 'documents',
     })
   } else {
     flags.push({
@@ -117,22 +128,25 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'No PO link',
       detail: 'Confirm whether a PO is contractually required. Request from customer if needed.',
       severity: 'warn',
+      category: 'documents',
     })
   }
 
   flags.push({
     id: 'pdf-diff',
     label: 'Signed vs unsigned comparison',
-    detail: 'Open both quote PDFs and confirm quote number, pricing, term, and clauses match. Automated PDF diff coming in a later release.',
+    detail: 'Confirm quote number, pricing, term, and clauses match across both PDFs.',
     severity: 'pending',
+    category: 'manual',
   })
 
   if (input.purchaseOrderUrl.trim()) {
     flags.push({
       id: 'po-audit',
       label: 'PO vs signed quote audit',
-      detail: 'Cross-check PO totals, product scope, term, and T&Cs against the signed quote. Automated PO audit coming later.',
+      detail: 'Cross-check PO totals, product scope, term, and T&Cs against the signed quote.',
       severity: 'pending',
+      category: 'manual',
     })
   }
 
@@ -140,15 +154,17 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     flags.push({
       id: 'support-plan',
       label: 'Support plan',
-      detail: `${input.supportPlan} — pulled from primary quote / opportunity.`,
+      detail: `${input.supportPlan} — from primary quote / opportunity.`,
       severity: 'pass',
+      category: 'salesforce',
     })
   } else {
     flags.push({
       id: 'support-plan-missing',
       label: 'Support plan not found',
-      detail: 'Could not resolve Standard, Gold, or Platinum from Salesforce — verify on the signed quote.',
+      detail: 'Verify Standard, Gold, or Platinum on the signed quote.',
       severity: 'warn',
+      category: 'salesforce',
     })
   }
 
@@ -156,8 +172,9 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     flags.push({
       id: 'user-count',
       label: 'User / seat count',
-      detail: `${input.userCount} — pulled from primary quote / opportunity.`,
+      detail: `${input.userCount} — from primary quote / opportunity.`,
       severity: 'pass',
+      category: 'salesforce',
     })
   } else {
     flags.push({
@@ -165,6 +182,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       label: 'User count not found',
       detail: 'Verify seat count on the signed quote before provisioning.',
       severity: 'warn',
+      category: 'salesforce',
     })
   }
 
@@ -172,8 +190,9 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     flags.push({
       id: 'contact-sandbox',
       label: 'Contact email (sandbox)',
-      detail: 'Sandbox org masks real emails. Confirm contact on prod or enter manually in the provisioning ticket.',
+      detail: 'Sandbox masks real emails — confirm on prod or enter manually.',
       severity: 'warn',
+      category: 'salesforce',
     })
   }
 
@@ -183,8 +202,9 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     flags.push({
       id: 'date-order',
       label: 'Renewal vs expiry dates',
-      detail: `Expiry (${formatUsDate(input.expiryDate)}) is before renewal (${formatUsDate(input.renewalDate)}) — confirm dates on the contract.`,
+      detail: `Expiry ${formatUsDate(input.expiryDate)} is before renewal ${formatUsDate(input.renewalDate)} — confirm on contract.`,
       severity: 'warn',
+      category: 'salesforce',
     })
   }
 
@@ -211,6 +231,13 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
   }
 
   return { flags, recommendation, summary }
+}
+
+export function severityLabel(severity: AnalysisSeverity): string {
+  if (severity === 'pass') return 'Pass'
+  if (severity === 'warn') return 'Warn'
+  if (severity === 'fail') return 'Fail'
+  return 'Manual'
 }
 
 export function analysisSummaryLabel(summary: AnalysisSummary): string {

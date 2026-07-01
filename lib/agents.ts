@@ -112,9 +112,10 @@ export const workflows: Workflow[] = [
     status: "active",
     sandboxOnly: true,
     steps: [
-      { agentId: "sf-agent", label: "Opportunity Lookup", requiresConfirmation: false },
-      { agentId: "contract-finder", label: "Document Links", requiresConfirmation: false },
-      { agentId: "provisioning-assistant-gem", label: "Review & Template", requiresConfirmation: false },
+      { agentId: "sf-agent", label: "Opportunity", requiresConfirmation: false },
+      { agentId: "contract-finder", label: "Documents", requiresConfirmation: false },
+      { agentId: "contract-analyzer", label: "Analysis & flags", requiresConfirmation: false },
+      { agentId: "provisioning-assistant-gem", label: "Provisioning template", requiresConfirmation: false },
     ],
   },
   {

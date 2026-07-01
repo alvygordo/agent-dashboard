@@ -7,6 +7,7 @@ import { theme } from "@/lib/theme"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
+import { QuoteReviewAnalysisReport } from "@/components/quote-review-analysis-report"
 import {
   fieldOrPlaceholder,
   formatContactLine,
@@ -14,25 +15,19 @@ import {
   formatTermMonthsOnly,
   formatUsDate,
 } from "@/lib/sf-field-format"
-import {
-  analysisSummaryLabel,
-  buildQuoteReviewAnalysis,
-  type AnalysisFlag,
-  type AnalysisSeverity,
-} from "@/lib/quote-review-analysis"
+import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import {
   ArrowRight,
   ArrowLeft,
   Bot,
-  CheckCircle,
   AlertCircle,
   Loader2,
-  ExternalLink,
   Copy,
   Check,
+  ExternalLink,
 } from "lucide-react"
 
-type Step = "opp-input" | "documents" | "review"
+type Step = "opp-input" | "documents" | "analysis" | "template"
 
 type OppData = {
   id: string
@@ -65,79 +60,12 @@ type DocLinks = {
 
 const STEPS: { stepName: Step; label: string }[] = [
   { stepName: "opp-input", label: "Opportunity" },
-  { stepName: "documents", label: "Document Links" },
-  { stepName: "review", label: "Review" },
+  { stepName: "documents", label: "Documents" },
+  { stepName: "analysis", label: "Analysis & flags" },
+  { stepName: "template", label: "Provisioning template" },
 ]
 
-function FlagIcon({ severity }: { severity: AnalysisSeverity }) {
-  if (severity === "pass") return <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
-  if (severity === "fail") return <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
-  if (severity === "pending") return <Loader2 className="w-4 h-4 text-gray-500 shrink-0" />
-  return <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
-}
-
-function flagRowClass(severity: AnalysisSeverity): string {
-  if (severity === "pass") return "border-green-200 bg-green-50"
-  if (severity === "fail") return "border-red-200 bg-red-50"
-  if (severity === "pending") return "border-gray-200 bg-gray-50"
-  return "border-amber-200 bg-amber-50"
-}
-
-function DocLinkButton({ href, label }: { href: string; label: string }) {
-  return (
-    <a
-      href={href}
-      target="_blank"
-      rel="noopener noreferrer"
-      className={`flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-900 hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer`}
-    >
-      <span>{label}</span>
-      <ExternalLink className={`w-4 h-4 shrink-0 ${theme.accent}`} />
-    </a>
-  )
-}
-
-function AnalysisPanel({ flags, recommendation, summary }: {
-  flags: AnalysisFlag[]
-  recommendation: string
-  summary: ReturnType<typeof buildQuoteReviewAnalysis>["summary"]
-}) {
-  const bannerClass =
-    summary === "accept"
-      ? "border-green-300 bg-green-50 text-green-900"
-      : summary === "review"
-        ? "border-amber-300 bg-amber-50 text-amber-900"
-        : "border-red-300 bg-red-50 text-red-900"
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-      <div>
-        <h3 className="font-semibold text-gray-900">Analysis &amp; flags</h3>
-        <p className="text-xs text-gray-500 mt-1">Automated checks plus manual review steps for this deal.</p>
-      </div>
-      <div className={`rounded-lg border px-4 py-3 ${bannerClass}`}>
-        <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
-          {analysisSummaryLabel(summary)}
-        </p>
-        <p className="text-sm font-medium mt-1">{recommendation}</p>
-      </div>
-      <ul className="space-y-2">
-        {flags.map((flag) => (
-          <li
-            key={flag.id}
-            className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm ${flagRowClass(flag.severity)}`}
-          >
-            <FlagIcon severity={flag.severity} />
-            <div>
-              <p className="font-medium text-gray-900">{flag.label}</p>
-              <p className="text-gray-600 mt-0.5">{flag.detail}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  )
-}
+const STEP_COUNT = STEPS.length
 
 function buildProvisioningTemplate(opp: OppData): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
@@ -263,7 +191,7 @@ function SignedQuoteReviewerInner() {
       return
     }
     setDocError("")
-    setStep("review")
+    setStep("analysis")
   }
 
   async function copyTemplate() {
@@ -273,7 +201,15 @@ function SignedQuoteReviewerInner() {
     setTimeout(() => setCopied(false), 2000)
   }
 
+  function startNewReview() {
+    setStep("opp-input")
+    setOppData(null)
+    setOppQuery("")
+    setDocs({ unsignedQuoteUrl: "", signedQuoteUrl: "", purchaseOrderUrl: "" })
+  }
+
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
+  const stepNumber = stepIndex + 1
   const template = oppData ? buildProvisioningTemplate(oppData) : ""
   const analysis = oppData
     ? buildQuoteReviewAnalysis({
@@ -315,8 +251,8 @@ function SignedQuoteReviewerInner() {
         </div>
       </div>
 
-      <div className="border-b border-gray-200 bg-white shrink-0">
-        <div className="px-6 py-3 flex items-center gap-4">
+      <div className="border-b border-gray-200 bg-white shrink-0 overflow-x-auto">
+        <div className="px-6 py-3 flex items-center gap-3 min-w-max">
           {STEPS.map((s, i) => {
             const isActive = step === s.stepName
             const isDone = visitedSteps.has(s.stepName) && stepIndex > i
@@ -325,7 +261,7 @@ function SignedQuoteReviewerInner() {
               <div key={s.stepName} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">
                   <div
-                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors
+                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-colors shrink-0
                     ${isDone ? "bg-green-500 text-white" : isActive ? theme.stepActive : "bg-gray-200 text-gray-400"}`}
                   >
                     {isDone ? "✓" : i + 1}
@@ -333,17 +269,17 @@ function SignedQuoteReviewerInner() {
                   {isClickable ? (
                     <button
                       onClick={() => setStep(s.stepName)}
-                      className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium"
+                      className="text-sm text-green-600 hover:text-green-800 hover:underline cursor-pointer font-medium whitespace-nowrap"
                     >
                       {s.label}
                     </button>
                   ) : (
-                    <span className={`text-sm ${isActive ? "text-gray-900 font-medium" : "text-gray-400"}`}>
+                    <span className={`text-sm whitespace-nowrap ${isActive ? "text-gray-900 font-medium" : "text-gray-400"}`}>
                       {s.label}
                     </span>
                   )}
                 </div>
-                {i < STEPS.length - 1 && <ArrowRight className="w-3 h-3 text-gray-300" />}
+                {i < STEPS.length - 1 && <ArrowRight className="w-3 h-3 text-gray-300 shrink-0" />}
               </div>
             )
           })}
@@ -355,10 +291,10 @@ function SignedQuoteReviewerInner() {
           <div className="flex flex-col items-center justify-center min-h-full px-6 py-12">
             <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
               <div>
-                <Badge className={`${theme.stepBadge} mb-3`}>Step 1 of 3</Badge>
+                <Badge className={`${theme.stepBadge} mb-3`}>Step 1 of {STEP_COUNT}</Badge>
                 <h2 className="text-xl font-bold text-gray-900">Enter the Opportunity</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Search by name or paste a Salesforce Opportunity ID. Win Type must be Quote Signed or PO Received to proceed.
+                  Search by name or paste a Salesforce Opportunity ID.
                 </p>
               </div>
               <div className="space-y-2">
@@ -393,11 +329,6 @@ function SignedQuoteReviewerInner() {
                           {opp.accountName && (
                             <span className="text-gray-500 ml-2">· {opp.accountName}</span>
                           )}
-                          {opp.winType && (
-                            <span className={`ml-2 text-xs ${opp.winTypeValid ? "text-green-600" : "text-amber-600"}`}>
-                              Win Type: {opp.winType}
-                            </span>
-                          )}
                         </button>
                       </li>
                     ))}
@@ -426,22 +357,16 @@ function SignedQuoteReviewerInner() {
           <div className="flex flex-col items-center justify-center min-h-full px-6 py-12">
             <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
               <div>
-                <Badge className={`${theme.stepBadge} mb-3`}>Step 2 of 3</Badge>
-                <h2 className="text-xl font-bold text-gray-900">Paste Document Links</h2>
+                <Badge className={`${theme.stepBadge} mb-3`}>Step 2 of {STEP_COUNT}</Badge>
+                <h2 className="text-xl font-bold text-gray-900">Document Links</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Provide links to the unsigned quote, signed quote, and PO (if applicable).
+                  Paste links to the unsigned quote, signed quote, and PO (if applicable).
                 </p>
               </div>
 
               <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm space-y-1">
                 <p className="font-medium text-gray-900">{oppData.name}</p>
                 <p className="text-gray-500">{oppData.accountName}</p>
-                {oppData.winType && (
-                  <p className={oppData.winTypeValid ? "text-green-700" : "text-amber-700"}>
-                    Win Type: {oppData.winType}
-                    {!oppData.winTypeValid && " — expected Quote Signed or PO Received"}
-                  </p>
-                )}
                 <a
                   href={oppData.oppUrl}
                   target="_blank"
@@ -496,78 +421,59 @@ function SignedQuoteReviewerInner() {
                   <ArrowLeft className="w-4 h-4 mr-1" /> Back
                 </Button>
                 <Button onClick={handleDocumentsContinue} className={`flex-1 ${theme.btnPrimary} cursor-pointer`}>
-                  Review <ArrowRight className="w-4 h-4 ml-2" />
+                  Run analysis <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </div>
           </div>
         )}
 
-        {step === "review" && oppData && (
+        {step === "analysis" && oppData && analysis && (
+          <div className="max-w-5xl mx-auto px-6 py-10">
+            <Badge className={`${theme.stepBadge} mb-3`}>Step 3 of {STEP_COUNT}</Badge>
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-8">
+              <QuoteReviewAnalysisReport
+                analysis={analysis}
+                docs={docs}
+                opp={{
+                  name: oppData.name,
+                  accountName: oppData.accountName,
+                  product: oppData.product,
+                  winType: oppData.winType,
+                  supportPlan: oppData.supportPlan,
+                  userCount: oppData.userCount,
+                  renewalDate: oppData.renewalDate,
+                  expiryDate: oppData.expiryDate,
+                  primaryContactDisplay:
+                    oppData.primaryContact?.display
+                    ?? formatContactLine(oppData.primaryContact),
+                }}
+              />
+            </div>
+            <div className="flex gap-3 mt-6">
+              <Button variant="outline" onClick={() => setStep("documents")} className="cursor-pointer">
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              </Button>
+              <Button onClick={() => setStep("template")} className={`flex-1 ${theme.btnPrimary} cursor-pointer`}>
+                Continue to provisioning template <ArrowRight className="w-4 h-4 ml-2" />
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {step === "template" && oppData && (
           <div className="max-w-3xl mx-auto px-6 py-10 space-y-6">
             <div>
-              <Badge className={`${theme.stepBadge} mb-3`}>Step 3 of 3</Badge>
-              <h2 className="text-2xl font-bold text-gray-900">Review Summary</h2>
+              <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of {STEP_COUNT}</Badge>
+              <h2 className="text-2xl font-bold text-gray-900">Provisioning Template</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Review analysis flags, open documents, then copy the provisioning template.
+                Copy and paste into your provisioning ticket.
               </p>
-            </div>
-
-            {analysis && (
-              <AnalysisPanel
-                flags={analysis.flags}
-                recommendation={analysis.recommendation}
-                summary={analysis.summary}
-              />
-            )}
-
-            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-              <h3 className="font-semibold text-gray-900">Documents</h3>
-              <p className="text-sm text-gray-500">Open each file to compare signed vs unsigned (and PO if provided).</p>
-              <div className="grid gap-3 sm:grid-cols-1">
-                <DocLinkButton href={docs.unsignedQuoteUrl} label="Open unsigned quote" />
-                <DocLinkButton href={docs.signedQuoteUrl} label="Open signed quote" />
-                {docs.purchaseOrderUrl ? (
-                  <DocLinkButton href={docs.purchaseOrderUrl} label="Open purchase order" />
-                ) : (
-                  <p className="text-sm text-gray-400 px-1">Purchase order: not provided</p>
-                )}
-              </div>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <CheckCircle className="w-4 h-4 text-green-600" /> Opportunity
-              </h3>
-              <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                <div><dt className="text-gray-500">Name</dt><dd className="font-medium">{oppData.name}</dd></div>
-                <div><dt className="text-gray-500">Account</dt><dd>{oppData.accountName ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Win Type</dt><dd>{oppData.winType ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Product</dt><dd>{oppData.product ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Support plan</dt><dd>{oppData.supportPlan ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Users / seats</dt><dd>{oppData.userCount ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Term</dt><dd>{oppData.currentTerm ?? "—"}</dd></div>
-                <div><dt className="text-gray-500">Primary contact</dt>
-                  <dd>
-                    {oppData.primaryContact?.display
-                      ?? formatContactLine(oppData.primaryContact)}
-                    {oppData.primaryContact?.email?.includes(".data") && (
-                      <span className="block text-xs text-amber-600 mt-0.5">
-                        Sandbox org masks real contact emails — use prod or enter manually.
-                      </span>
-                    )}
-                  </dd>
-                </div>
-              </dl>
-              <a href={oppData.oppUrl} target="_blank" rel="noopener noreferrer"
-                className={`inline-flex items-center gap-1 text-sm ${theme.accent} hover:underline`}>
-                Open in Salesforce <ExternalLink className="w-3 h-3" />
-              </a>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
               <div className="flex items-center justify-between">
-                <h3 className="font-semibold text-gray-900">Provisioning template</h3>
+                <p className="text-sm text-gray-600">{oppData.name}</p>
                 <Button variant="outline" size="sm" onClick={copyTemplate} className="cursor-pointer">
                   {copied ? (
                     <><Check className="w-3 h-3 mr-1 text-green-600" /> Copied</>
@@ -576,18 +482,14 @@ function SignedQuoteReviewerInner() {
                   )}
                 </Button>
               </div>
-              <Textarea readOnly value={template} rows={16} className="font-mono text-xs bg-gray-50" />
-              <p className="text-xs text-gray-500">
-                Fill in bracketed fields manually. Queue routing from Product Matrix will be added in a later phase.
-              </p>
+              <Textarea readOnly value={template} rows={18} className="font-mono text-xs bg-gray-50" />
             </div>
 
             <div className="flex gap-3">
-              <Button variant="outline" onClick={() => setStep("documents")} className="cursor-pointer">
-                <ArrowLeft className="w-4 h-4 mr-1" /> Back
+              <Button variant="outline" onClick={() => setStep("analysis")} className="cursor-pointer">
+                <ArrowLeft className="w-4 h-4 mr-1" /> Back to analysis
               </Button>
-              <Button onClick={() => { setStep("opp-input"); setOppData(null); setOppQuery(""); setDocs({ unsignedQuoteUrl: "", signedQuoteUrl: "", purchaseOrderUrl: "" }) }}
-                className={`${theme.btnPrimary} cursor-pointer`}>
+              <Button onClick={startNewReview} className={`${theme.btnPrimary} cursor-pointer`}>
                 Start new review
               </Button>
             </div>
