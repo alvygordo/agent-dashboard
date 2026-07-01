@@ -8,6 +8,12 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import {
+  formatContactLine,
+  formatTermLabel,
+  formatTermMonthsOnly,
+  formatUsDate,
+} from "@/lib/sf-field-format"
+import {
   ArrowRight,
   ArrowLeft,
   Bot,
@@ -38,7 +44,7 @@ type OppData = {
   renewalDate: string | null
   expiryDate: string | null
   autoRenewal: string | null
-  primaryContact: { name: string; email: string | null } | null
+  primaryContact: { name: string; email: string | null; display?: string } | null
   oppUrl: string
 }
 
@@ -56,23 +62,21 @@ const STEPS: { stepName: Step; label: string }[] = [
 
 const VALID_WIN_TYPES = new Set(["Quote Signed", "PO Received"])
 
-function buildProvisioningTemplate(opp: OppData, docs: DocLinks): string {
+function buildProvisioningTemplate(opp: OppData): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
-  const months = opp.currentTerm ?? "[Insert Number of Months]"
+  const months = formatTermMonthsOnly(opp.currentTerm)
+  const termLabel = formatTermLabel(opp.currentTerm)
   const product = opp.product ?? "[Insert Product Name]"
-  const contact = opp.primaryContact
-    ? `${opp.primaryContact.name}${opp.primaryContact.email ? ` (${opp.primaryContact.email})` : ""}`
-    : "[Insert Primary Contact name and email]"
+  const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
-  const renewal = opp.renewalDate ?? "[Insert MM/DD/YYYY]"
-  const expiry = opp.expiryDate ?? "[Insert MM/DD/YYYY]"
+  const renewal = formatUsDate(opp.renewalDate)
+  const expiry = formatUsDate(opp.expiryDate)
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
-  const contractTerms = opp.currentTerm ?? "[Insert Contract Terms - e.g., 12 Months / 3 Years]"
   const reason =
     opp.winType === "PO Received"
-      ? `Customer is renewing for ${contractTerms}`
-      : `Customer signed the quote / is renewing for ${contractTerms}`
+      ? `Customer is renewing for ${termLabel}`
+      : `Customer signed the quote / is renewing for ${termLabel}`
 
   return [
     `${endUser} : ${months} months ${product} License Renewal`,
@@ -90,11 +94,6 @@ function buildProvisioningTemplate(opp: OppData, docs: DocLinks): string {
     `Contact person: ${contact}`,
     "Reason for request:",
     reason,
-    "",
-    "--- Document links (for your reference) ---",
-    `Unsigned quote: ${docs.unsignedQuoteUrl}`,
-    `Signed quote: ${docs.signedQuoteUrl}`,
-    docs.purchaseOrderUrl ? `Purchase order: ${docs.purchaseOrderUrl}` : "Purchase order: (none provided)",
   ].join("\n")
 }
 
@@ -188,13 +187,13 @@ function SignedQuoteReviewerInner() {
 
   async function copyTemplate() {
     if (!oppData) return
-    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData, docs))
+    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
 
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
-  const template = oppData ? buildProvisioningTemplate(oppData, docs) : ""
+  const template = oppData ? buildProvisioningTemplate(oppData) : ""
   const winTypeBlocked = oppData?.winType != null && !VALID_WIN_TYPES.has(oppData.winType)
 
   return (
@@ -451,9 +450,8 @@ function SignedQuoteReviewerInner() {
                 <div><dt className="text-gray-500">Term</dt><dd>{oppData.currentTerm ?? "—"}</dd></div>
                 <div><dt className="text-gray-500">Primary contact</dt>
                   <dd>
-                    {oppData.primaryContact
-                      ? `${oppData.primaryContact.name}${oppData.primaryContact.email ? ` · ${oppData.primaryContact.email}` : ""}`
-                      : "—"}
+                    {oppData.primaryContact?.display
+                      ?? formatContactLine(oppData.primaryContact)}
                   </dd>
                 </div>
               </dl>

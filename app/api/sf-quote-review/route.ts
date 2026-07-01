@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jsforce, { type Connection } from 'jsforce'
+import {
+  extractUrlFromSfField,
+  formatContactLine,
+  toLightningBaseUrl,
+} from '@/lib/sf-field-format'
 
 const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
 
@@ -48,7 +53,7 @@ function sfLoginUrl() {
     : 'https://test.salesforce.com'
 }
 
-function instanceUrl() {
+function instanceUrlFallback() {
   return process.env.SALESFORCE_INSTANCE_URL
     ?? (process.env.NEXT_PUBLIC_ENV === 'production'
       ? 'https://trilogy-sales.lightning.force.com'
@@ -65,6 +70,13 @@ async function connect() {
   const conn = new jsforce.Connection({ loginUrl: sfLoginUrl() })
   await conn.login(username, password + token)
   return conn
+}
+
+function lightningBaseFromConn(conn: Connection): string {
+  if (conn.instanceUrl) {
+    return toLightningBaseUrl(conn.instanceUrl)
+  }
+  return instanceUrlFallback().replace(/\/lightning.*$/, '')
 }
 
 async function queryOpp(conn: Connection, where: string): Promise<OppRow[]> {
@@ -112,16 +124,18 @@ function mapOpp(
     ownerName: opp.Owner?.Name ?? null,
     winType,
     winTypeValid: winType ? VALID_WIN_TYPES.has(winType) : false,
-    signedQuoteUrl: opp.Signed_Quote__c ?? null,
-    purchaseOrderLink: opp.Purchase_Order_Link__c ?? null,
-    netSuiteSubLink: opp.NetSuite_Sub_Link__c ?? null,
+    signedQuoteUrl: extractUrlFromSfField(opp.Signed_Quote__c),
+    purchaseOrderLink: extractUrlFromSfField(opp.Purchase_Order_Link__c),
+    netSuiteSubLink: extractUrlFromSfField(opp.NetSuite_Sub_Link__c),
     product: opp.Product__c ?? null,
     currentTerm: opp.Current_Term__c ?? opp.Current_Billing_Term__c ?? null,
     currentArr: opp.Current_ARR__c ?? null,
     renewalDate: opp.Renewal_Date__c ?? null,
     expiryDate: opp.Current_Subscription_End_Date__c ?? null,
     autoRenewal: opp.CurrentContractHasAutoRenewalClause__c ?? null,
-    primaryContact: primary,
+    primaryContact: primary
+      ? { name: primary.name, email: primary.email, display: formatContactLine(primary) }
+      : null,
     oppUrl: `${lightningBase}/lightning/r/Opportunity/${opp.Id}/view`,
   }
 }
@@ -138,7 +152,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const conn = await connect()
-    const lightningBase = instanceUrl().replace(/\/lightning.*$/, '')
+    const lightningBase = lightningBaseFromConn(conn)
 
     let records: OppRow[]
     if (oppId) {
