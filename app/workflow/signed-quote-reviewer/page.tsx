@@ -16,6 +16,7 @@ import {
   formatUsDate,
 } from "@/lib/sf-field-format"
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
+import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
 import {
   ArrowRight,
@@ -127,9 +128,20 @@ function SignedQuoteReviewerInner() {
   })
   const [docError, setDocError] = useState("")
   const [copied, setCopied] = useState(false)
+  const [docAnalysis, setDocAnalysis] = useState<DocumentAnalysisBundle | null>(null)
+  const [docAnalysisLoading, setDocAnalysisLoading] = useState(false)
+  const [docAnalysisError, setDocAnalysisError] = useState<string | null>(null)
 
   useEffect(() => {
     setVisitedSteps((prev) => new Set(prev).add(step))
+  }, [step])
+
+  useEffect(() => {
+    if (step === "documents") {
+      setDocAnalysis(null)
+      setDocAnalysisError(null)
+      setDocAnalysisLoading(false)
+    }
   }, [step])
 
   async function fetchOpp(nameOrId?: string) {
@@ -192,8 +204,59 @@ function SignedQuoteReviewerInner() {
       return
     }
     setDocError("")
+    setDocAnalysis(null)
+    setDocAnalysisError(null)
     setStep("analysis")
   }
+
+  useEffect(() => {
+    if (step !== "analysis" || !oppData) return
+    if (docAnalysis || docAnalysisLoading) return
+
+    let cancelled = false
+    setDocAnalysisLoading(true)
+    setDocAnalysisError(null)
+
+    fetch("/api/sf-quote-documents", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        unsignedQuoteUrl: docs.unsignedQuoteUrl,
+        signedQuoteUrl: docs.signedQuoteUrl,
+        purchaseOrderUrl: docs.purchaseOrderUrl,
+        salesforce: {
+          accountName: oppData.accountName,
+          product: oppData.product,
+          supportPlan: oppData.supportPlan,
+          userCount: oppData.userCount,
+          renewalDate: oppData.renewalDate,
+          expiryDate: oppData.expiryDate,
+          currentTerm: oppData.currentTerm,
+          currentArr: oppData.currentArr,
+          paymentTerms: oppData.currentTerm != null ? String(oppData.currentTerm) : null,
+        },
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json()
+        if (cancelled) return
+        if (!res.ok) {
+          setDocAnalysisError(data.error ?? "Document analysis failed")
+          return
+        }
+        setDocAnalysis(data as DocumentAnalysisBundle)
+      })
+      .catch(() => {
+        if (!cancelled) setDocAnalysisError("Could not reach document analysis service")
+      })
+      .finally(() => {
+        if (!cancelled) setDocAnalysisLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [step, oppData, docs, docAnalysis, docAnalysisLoading])
 
   async function copyTemplate() {
     if (!oppData) return
@@ -207,6 +270,8 @@ function SignedQuoteReviewerInner() {
     setOppData(null)
     setOppQuery("")
     setDocs({ unsignedQuoteUrl: "", signedQuoteUrl: "", purchaseOrderUrl: "" })
+    setDocAnalysis(null)
+    setDocAnalysisError(null)
   }
 
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
@@ -223,7 +288,7 @@ function SignedQuoteReviewerInner() {
         unsignedQuoteUrl: docs.unsignedQuoteUrl,
         signedQuoteUrl: docs.signedQuoteUrl,
         purchaseOrderUrl: docs.purchaseOrderUrl,
-      })
+      }, docAnalysis)
     : null
   const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
   const template = oppData ? buildProvisioningTemplate(oppData) : ""
@@ -437,6 +502,21 @@ function SignedQuoteReviewerInner() {
               <QuoteReviewAnalysisReport
                 analysis={analysis}
                 docs={docs}
+                poProvided={Boolean(docs.purchaseOrderUrl.trim())}
+                sfAlignment={{
+                  accountName: oppData.accountName,
+                  product: oppData.product,
+                  supportPlan: oppData.supportPlan,
+                  userCount: oppData.userCount,
+                  renewalDate: oppData.renewalDate,
+                  expiryDate: oppData.expiryDate,
+                  currentTerm: oppData.currentTerm,
+                  currentArr: oppData.currentArr,
+                  paymentTerms: oppData.currentTerm != null ? String(oppData.currentTerm) : null,
+                }}
+                docAnalysis={docAnalysis}
+                docAnalysisLoading={docAnalysisLoading}
+                docAnalysisError={docAnalysisError}
                 opp={{
                   name: oppData.name,
                   accountName: oppData.accountName,

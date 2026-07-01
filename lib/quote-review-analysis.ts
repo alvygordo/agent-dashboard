@@ -1,4 +1,6 @@
 import { formatUsDate } from '@/lib/sf-field-format'
+import type { DocumentAnalysisBundle } from '@/lib/quote-alignment'
+import { documentFlagsFromAnalysis } from '@/lib/quote-alignment'
 
 export type AnalysisSeverity = 'pass' | 'warn' | 'fail' | 'pending'
 
@@ -31,6 +33,7 @@ export type QuoteReviewAnalysis = {
   flags: AnalysisFlag[]
   recommendation: string
   summary: AnalysisSummary
+  documentAnalysis?: DocumentAnalysisBundle | null
 }
 
 const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
@@ -49,7 +52,10 @@ function worstSeverity(flags: AnalysisFlag[]): AnalysisSeverity {
   )
 }
 
-export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAnalysis {
+export function buildQuoteReviewAnalysis(
+  input: QuoteReviewInput,
+  documentAnalysis?: DocumentAnalysisBundle | null,
+): QuoteReviewAnalysis {
   const flags: AnalysisFlag[] = []
 
   if (!input.winType?.trim()) {
@@ -118,8 +124,9 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     flags.push({
       id: 'po-provided',
       label: 'Purchase order',
-      detail: 'PO document link provided — confirm pricing and scope match the signed quote.',
-      severity: 'pass',
+      detail: documentAnalysis?.poAudit.summary
+        ?? 'PO document link provided — analysis pending.',
+      severity: documentAnalysis?.poAudit.overallSeverity ?? 'pending',
       category: 'documents',
     })
   } else {
@@ -132,22 +139,27 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
     })
   }
 
-  flags.push({
-    id: 'pdf-diff',
-    label: 'Signed vs unsigned comparison',
-    detail: 'Confirm quote number, pricing, term, and clauses match across both PDFs.',
-    severity: 'pending',
-    category: 'manual',
-  })
-
-  if (input.purchaseOrderUrl.trim()) {
+  if (documentAnalysis) {
+    const docFlags = documentFlagsFromAnalysis(documentAnalysis)
+    flags.push(...docFlags)
+  } else {
     flags.push({
-      id: 'po-audit',
-      label: 'PO vs signed quote audit',
-      detail: 'Cross-check PO totals, product scope, term, and T&Cs against the signed quote.',
+      id: 'pdf-diff',
+      label: 'Signed vs unsigned comparison',
+      detail: 'Analyzing PDFs…',
       severity: 'pending',
       category: 'manual',
     })
+
+    if (input.purchaseOrderUrl.trim()) {
+      flags.push({
+        id: 'po-audit',
+        label: 'PO vs signed quote audit',
+        detail: 'Analyzing PO…',
+        severity: 'pending',
+        category: 'manual',
+      })
+    }
   }
 
   if (input.supportPlan) {
@@ -245,7 +257,7 @@ export function buildQuoteReviewAnalysis(input: QuoteReviewInput): QuoteReviewAn
       'Preliminary checks passed. Complete a quick visual compare of signed vs unsigned PDFs, then copy the provisioning template.'
   }
 
-  return { flags, recommendation, summary }
+  return { flags, recommendation, summary, documentAnalysis: documentAnalysis ?? null }
 }
 
 export function severityLabel(severity: AnalysisSeverity): string {

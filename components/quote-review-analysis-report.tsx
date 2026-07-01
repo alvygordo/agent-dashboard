@@ -2,6 +2,13 @@
 
 import { theme } from "@/lib/theme"
 import {
+  buildSfBaselineAlignment,
+  type DocumentAnalysisBundle,
+  type AlignmentRow,
+  type AlignmentStatus,
+  type SfAlignmentInput,
+} from "@/lib/quote-alignment"
+import {
   analysisSummaryLabel,
   severityLabel,
   type AnalysisFlag,
@@ -9,7 +16,7 @@ import {
   type QuoteReviewAnalysis,
 } from "@/lib/quote-review-analysis"
 import { formatUsDate } from "@/lib/sf-field-format"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Loader2 } from "lucide-react"
 
 type OppSummary = {
   name: string
@@ -29,14 +36,6 @@ type DocLinks = {
   purchaseOrderUrl: string
 }
 
-const COMPARE_CHECKLIST = [
-  "Quote number matches",
-  "Pricing / ARR matches",
-  "Term length matches",
-  "Product & quantity match",
-  "No altered clauses",
-]
-
 function SeverityBadge({ severity }: { severity: AnalysisSeverity }) {
   const styles: Record<AnalysisSeverity, string> = {
     pass: "bg-green-100 text-green-800 border-green-200",
@@ -47,6 +46,28 @@ function SeverityBadge({ severity }: { severity: AnalysisSeverity }) {
   return (
     <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded border ${styles[severity]}`}>
       {severityLabel(severity)}
+    </span>
+  )
+}
+
+function AlignmentBadge({ status }: { status: AlignmentStatus }) {
+  const styles: Record<AlignmentStatus, string> = {
+    aligned: "bg-green-100 text-green-800 border-green-200",
+    mismatch: "bg-amber-100 text-amber-800 border-amber-200",
+    partial: "bg-blue-100 text-blue-800 border-blue-200",
+    unknown: "bg-gray-100 text-gray-700 border-gray-200",
+    na: "bg-gray-50 text-gray-400 border-gray-200",
+  }
+  const labels: Record<AlignmentStatus, string> = {
+    aligned: "Aligned",
+    mismatch: "Mismatch",
+    partial: "Partial",
+    unknown: "Unknown",
+    na: "N/A",
+  }
+  return (
+    <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded border ${styles[status]}`}>
+      {labels[status]}
     </span>
   )
 }
@@ -79,24 +100,65 @@ function FlagTable({ flags }: { flags: AnalysisFlag[] }) {
   )
 }
 
+function ComparisonCheckTable({
+  checks,
+}: {
+  checks: { check: string; severity: AnalysisSeverity; finding: string }[]
+}) {
+  if (checks.length === 0) return null
+  return (
+    <div className="overflow-hidden rounded-lg border border-gray-200">
+      <table className="w-full text-sm">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[28%]">Check</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[12%]">Status</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Finding</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {checks.map((row) => (
+            <tr key={row.check} className="bg-white">
+              <td className="px-4 py-3 font-medium text-gray-900 align-top">{row.check}</td>
+              <td className="px-4 py-3 align-top">
+                <SeverityBadge severity={row.severity} />
+              </td>
+              <td className="px-4 py-3 text-gray-600 align-top">{row.finding}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 function DocCompareColumn({
   title,
   subtitle,
   linkLabel,
   href,
   status,
+  pageCount,
+  titleFromPdf,
 }: {
   title: string
   subtitle: string
   linkLabel: string
   href: string
   status: AnalysisSeverity
+  pageCount: number | null
+  titleFromPdf: string | null
 }) {
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4 space-y-3">
       <div>
         <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{title}</p>
         <p className="text-sm font-medium text-gray-900 mt-0.5">{subtitle}</p>
+        {titleFromPdf && (
+          <p className="text-xs text-gray-500 mt-0.5 truncate" title={titleFromPdf}>
+            File: {titleFromPdf}
+          </p>
+        )}
         <a
           href={href}
           target="_blank"
@@ -107,21 +169,51 @@ function DocCompareColumn({
           <ExternalLink className="w-3.5 h-3.5" />
         </a>
       </div>
-      <div className="flex items-center gap-2 text-xs">
-        <span className="text-gray-500">Link status</span>
-        <SeverityBadge severity={status} />
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">Link status</span>
+          <SeverityBadge severity={status} />
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-gray-500">Pages</span>
+          <span className="font-medium text-gray-800">
+            {pageCount != null ? `${pageCount} page${pageCount === 1 ? "" : "s"}` : "—"}
+          </span>
+        </div>
       </div>
-      <div>
-        <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Verify on PDF</p>
-        <ul className="text-xs text-gray-600 space-y-1">
-          {COMPARE_CHECKLIST.map((item) => (
-            <li key={item} className="flex items-start gap-2">
-              <span className="text-gray-300">☐</span>
-              {item}
-            </li>
+    </div>
+  )
+}
+
+function AlignmentTable({ rows }: { rows: AlignmentRow[] }) {
+  return (
+    <div className="overflow-x-auto rounded-lg border border-gray-200">
+      <table className="w-full text-sm min-w-[720px]">
+        <thead className="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[18%]">Field</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Salesforce</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Signed quote</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Purchase order</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[10%]">Aligned?</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Note</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100 bg-white">
+          {rows.map((row) => (
+            <tr key={row.field}>
+              <td className="px-4 py-2.5 font-medium text-gray-900 align-top">{row.field}</td>
+              <td className="px-4 py-2.5 text-gray-800 align-top">{row.salesforce}</td>
+              <td className="px-4 py-2.5 text-gray-800 align-top">{row.signedQuote}</td>
+              <td className="px-4 py-2.5 text-gray-800 align-top">{row.purchaseOrder}</td>
+              <td className="px-4 py-2.5 align-top">
+                <AlignmentBadge status={row.status} />
+              </td>
+              <td className="px-4 py-2.5 text-gray-600 align-top text-xs">{row.note ?? "—"}</td>
+            </tr>
           ))}
-        </ul>
-      </div>
+        </tbody>
+      </table>
     </div>
   )
 }
@@ -162,10 +254,20 @@ export function QuoteReviewAnalysisReport({
   analysis,
   opp,
   docs,
+  sfAlignment,
+  poProvided,
+  docAnalysis,
+  docAnalysisLoading,
+  docAnalysisError,
 }: {
   analysis: QuoteReviewAnalysis
   opp: OppSummary
   docs: DocLinks
+  sfAlignment: SfAlignmentInput
+  poProvided: boolean
+  docAnalysis?: DocumentAnalysisBundle | null
+  docAnalysisLoading?: boolean
+  docAnalysisError?: string | null
 }) {
   const byCategory = (cat: AnalysisFlag["category"]) =>
     analysis.flags.filter((f) => f.category === cat)
@@ -179,6 +281,16 @@ export function QuoteReviewAnalysisReport({
       : analysis.summary === "review"
         ? "border-l-amber-500 bg-amber-50"
         : "border-l-red-500 bg-red-50"
+
+  const quoteChecks = docAnalysis?.quoteComparison.checks ?? []
+  const poChecks = docAnalysis?.poAudit.checks ?? []
+  const pendingLabel = docAnalysisLoading
+    ? "Analyzing…"
+    : docAnalysisError
+      ? "Not extracted — open PDF"
+      : "Pending PDF analysis"
+  const alignment = docAnalysis?.alignment
+    ?? buildSfBaselineAlignment(sfAlignment, poProvided, pendingLabel)
 
   return (
     <div className="space-y-8">
@@ -195,10 +307,25 @@ export function QuoteReviewAnalysisReport({
         <p className="text-base font-medium text-gray-900 mt-1">{analysis.recommendation}</p>
       </div>
 
+      {docAnalysisLoading && (
+        <div className="flex items-center gap-2 text-sm text-gray-500 py-2">
+          <Loader2 className="w-4 h-4 animate-spin" />
+          Analyzing PDFs from Salesforce…
+        </div>
+      )}
+      {docAnalysisError && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Document analysis failed: {docAnalysisError}. Open the PDFs manually to complete review.
+        </div>
+      )}
+
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quote comparison</h3>
-          <p className="text-xs text-gray-500 mt-1">Open both PDFs and confirm the signed quote matches the unsigned baseline.</p>
+          <p className="text-xs text-gray-500 mt-1">
+            {docAnalysis?.quoteComparison.summary
+              ?? "Comparing unsigned baseline to customer-signed quote."}
+          </p>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <DocCompareColumn
@@ -207,6 +334,8 @@ export function QuoteReviewAnalysisReport({
             linkLabel="Open unsigned quote"
             href={docs.unsignedQuoteUrl}
             status={unsignedStatus}
+            pageCount={docAnalysis?.quoteComparison.unsignedPages ?? null}
+            titleFromPdf={docAnalysis?.unsigned?.title ?? null}
           />
           <DocCompareColumn
             title="Customer signed"
@@ -214,31 +343,102 @@ export function QuoteReviewAnalysisReport({
             linkLabel="Open signed quote"
             href={docs.signedQuoteUrl}
             status={signedStatus}
+            pageCount={docAnalysis?.quoteComparison.signedPages ?? null}
+            titleFromPdf={docAnalysis?.signed?.title ?? null}
           />
         </div>
-        <FlagTable flags={byCategory("manual").filter((f) => f.id === "pdf-diff")} />
+        {quoteChecks.length > 0 ? (
+          <ComparisonCheckTable checks={quoteChecks} />
+        ) : (
+          <FlagTable flags={byCategory("manual").filter((f) => f.id.startsWith("pdf"))} />
+        )}
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Data alignment</h3>
+          <p className="text-xs text-gray-500 mt-1">{alignment.summary}</p>
+        </div>
+        <AlignmentTable rows={alignment.rows} />
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm space-y-2">
+          <p>
+            <span className="font-medium text-gray-900">Overall alignment: </span>
+            <AlignmentBadge status={alignment.overallAligned ? "aligned" : alignment.overallSeverity === "warn" ? "mismatch" : "unknown"} />
+            {" "}
+            {docAnalysisLoading
+              ? "PDF analysis in progress — alignment status will update shortly."
+              : alignment.overallAligned
+                ? "Core fields match across Salesforce, signed quote, and PO."
+                : docAnalysis
+                  ? "Review mismatched rows above before accepting."
+                  : "Salesforce column populated — complete PDF analysis to compare signed quote and PO."}
+          </p>
+          {(poProvided || docAnalysis?.poAudit.present) && (
+            <p>
+              <span className="font-medium text-gray-900">PO T&amp;C conflict: </span>
+              {!docAnalysis && docAnalysisLoading && (
+                <span className="text-gray-500">Analyzing PO…</span>
+              )}
+              {!docAnalysis && !docAnalysisLoading && (
+                <span className="text-gray-500">
+                  {poProvided ? "Awaiting PO PDF analysis." : "No PO provided."}
+                </span>
+              )}
+              {docAnalysis?.poAudit.tcConflict === "none_detected" && (
+                <span className="text-green-800">No conflict detected in extracted text.</span>
+              )}
+              {docAnalysis?.poAudit.tcConflict === "possible_conflict" && (
+                <span className="text-amber-800">Possible conflict — {docAnalysis.poAudit.tcConflictNote}</span>
+              )}
+              {docAnalysis?.poAudit.tcConflict === "unknown" && (
+                <span className="text-gray-700">{docAnalysis.poAudit.tcConflictNote}</span>
+              )}
+              {docAnalysis?.poAudit.tcConflict === "not_applicable" && (
+                <span className="text-gray-500">No PO provided.</span>
+              )}
+            </p>
+          )}
+        </div>
       </section>
 
       {(docs.purchaseOrderUrl || byCategory("documents").some((f) => f.id.startsWith("po"))) && (
         <section className="space-y-3">
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Purchase order</h3>
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Purchase order</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {docAnalysis?.poAudit.summary
+                ?? "Compare the attached PO to the signed quote on price, product scope, and terms."}
+            </p>
+          </div>
           {docs.purchaseOrderUrl ? (
-            <a
-              href={docs.purchaseOrderUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={`inline-flex items-center gap-1 text-sm ${theme.accent} hover:underline cursor-pointer`}
-            >
-              Open purchase order
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
+            <div className="flex flex-wrap items-center gap-4 text-sm">
+              <a
+                href={docs.purchaseOrderUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 ${theme.accent} hover:underline cursor-pointer`}
+              >
+                Open purchase order
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+              {docAnalysis?.poAudit.pageCount != null && (
+                <span className="text-xs text-gray-500">
+                  {docAnalysis.poAudit.pageCount} page{docAnalysis.poAudit.pageCount === 1 ? "" : "s"}
+                  {docAnalysis.purchaseOrder?.title ? ` · ${docAnalysis.purchaseOrder.title}` : ""}
+                </span>
+              )}
+            </div>
           ) : null}
-          <FlagTable
-            flags={[
-              ...byCategory("documents").filter((f) => f.id.startsWith("po")),
-              ...byCategory("manual").filter((f) => f.id === "po-audit"),
-            ]}
-          />
+          {poChecks.length > 0 ? (
+            <ComparisonCheckTable checks={poChecks} />
+          ) : (
+            <FlagTable
+              flags={[
+                ...byCategory("documents").filter((f) => f.id.startsWith("po")),
+                ...byCategory("manual").filter((f) => f.id.startsWith("po")),
+              ]}
+            />
+          )}
         </section>
       )}
 
