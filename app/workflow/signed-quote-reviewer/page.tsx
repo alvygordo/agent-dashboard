@@ -15,6 +15,12 @@ import {
   formatUsDate,
 } from "@/lib/sf-field-format"
 import {
+  analysisSummaryLabel,
+  buildQuoteReviewAnalysis,
+  type AnalysisFlag,
+  type AnalysisSeverity,
+} from "@/lib/quote-review-analysis"
+import {
   ArrowRight,
   ArrowLeft,
   Bot,
@@ -63,7 +69,75 @@ const STEPS: { stepName: Step; label: string }[] = [
   { stepName: "review", label: "Review" },
 ]
 
-const VALID_WIN_TYPES = new Set(["Quote Signed", "PO Received"])
+function FlagIcon({ severity }: { severity: AnalysisSeverity }) {
+  if (severity === "pass") return <CheckCircle className="w-4 h-4 text-green-600 shrink-0" />
+  if (severity === "fail") return <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
+  if (severity === "pending") return <Loader2 className="w-4 h-4 text-gray-500 shrink-0" />
+  return <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+}
+
+function flagRowClass(severity: AnalysisSeverity): string {
+  if (severity === "pass") return "border-green-200 bg-green-50"
+  if (severity === "fail") return "border-red-200 bg-red-50"
+  if (severity === "pending") return "border-gray-200 bg-gray-50"
+  return "border-amber-200 bg-amber-50"
+}
+
+function DocLinkButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`flex items-center justify-between gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-900 hover:border-purple-400 hover:bg-purple-50 transition-colors cursor-pointer`}
+    >
+      <span>{label}</span>
+      <ExternalLink className={`w-4 h-4 shrink-0 ${theme.accent}`} />
+    </a>
+  )
+}
+
+function AnalysisPanel({ flags, recommendation, summary }: {
+  flags: AnalysisFlag[]
+  recommendation: string
+  summary: ReturnType<typeof buildQuoteReviewAnalysis>["summary"]
+}) {
+  const bannerClass =
+    summary === "accept"
+      ? "border-green-300 bg-green-50 text-green-900"
+      : summary === "review"
+        ? "border-amber-300 bg-amber-50 text-amber-900"
+        : "border-red-300 bg-red-50 text-red-900"
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+      <div>
+        <h3 className="font-semibold text-gray-900">Analysis &amp; flags</h3>
+        <p className="text-xs text-gray-500 mt-1">Automated checks plus manual review steps for this deal.</p>
+      </div>
+      <div className={`rounded-lg border px-4 py-3 ${bannerClass}`}>
+        <p className="text-xs font-semibold uppercase tracking-wide opacity-80">
+          {analysisSummaryLabel(summary)}
+        </p>
+        <p className="text-sm font-medium mt-1">{recommendation}</p>
+      </div>
+      <ul className="space-y-2">
+        {flags.map((flag) => (
+          <li
+            key={flag.id}
+            className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-sm ${flagRowClass(flag.severity)}`}
+          >
+            <FlagIcon severity={flag.severity} />
+            <div>
+              <p className="font-medium text-gray-900">{flag.label}</p>
+              <p className="text-gray-600 mt-0.5">{flag.detail}</p>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 function buildProvisioningTemplate(opp: OppData): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
@@ -201,7 +275,20 @@ function SignedQuoteReviewerInner() {
 
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
   const template = oppData ? buildProvisioningTemplate(oppData) : ""
-  const winTypeBlocked = oppData?.winType != null && !VALID_WIN_TYPES.has(oppData.winType)
+  const analysis = oppData
+    ? buildQuoteReviewAnalysis({
+        winType: oppData.winType,
+        winTypeValid: oppData.winTypeValid,
+        supportPlan: oppData.supportPlan,
+        userCount: oppData.userCount,
+        renewalDate: oppData.renewalDate,
+        expiryDate: oppData.expiryDate,
+        primaryContactEmail: oppData.primaryContact?.email ?? null,
+        unsignedQuoteUrl: docs.unsignedQuoteUrl,
+        signedQuoteUrl: docs.signedQuoteUrl,
+        purchaseOrderUrl: docs.purchaseOrderUrl,
+      })
+    : null
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -422,28 +509,31 @@ function SignedQuoteReviewerInner() {
               <Badge className={`${theme.stepBadge} mb-3`}>Step 3 of 3</Badge>
               <h2 className="text-2xl font-bold text-gray-900">Review Summary</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Confirm document links and copy the provisioning template. Automated PDF diff and PO audit coming later.
+                Review analysis flags, open documents, then copy the provisioning template.
               </p>
             </div>
 
-            {winTypeBlocked && (
-              <div className="flex items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-semibold">Win Type gate — review before accepting</p>
-                  <p>
-                    Win Type is &quot;{oppData.winType}&quot;. This workflow is intended for Quote Signed or PO Received only.
-                  </p>
-                </div>
-              </div>
+            {analysis && (
+              <AnalysisPanel
+                flags={analysis.flags}
+                recommendation={analysis.recommendation}
+                summary={analysis.summary}
+              />
             )}
 
-            {!docs.purchaseOrderUrl && (
-              <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
-                <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />
-                <p>No PO link provided — confirm whether a PO is contractually required for this deal.</p>
+            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+              <h3 className="font-semibold text-gray-900">Documents</h3>
+              <p className="text-sm text-gray-500">Open each file to compare signed vs unsigned (and PO if provided).</p>
+              <div className="grid gap-3 sm:grid-cols-1">
+                <DocLinkButton href={docs.unsignedQuoteUrl} label="Open unsigned quote" />
+                <DocLinkButton href={docs.signedQuoteUrl} label="Open signed quote" />
+                {docs.purchaseOrderUrl ? (
+                  <DocLinkButton href={docs.purchaseOrderUrl} label="Open purchase order" />
+                ) : (
+                  <p className="text-sm text-gray-400 px-1">Purchase order: not provided</p>
+                )}
               </div>
-            )}
+            </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
               <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -473,34 +563,6 @@ function SignedQuoteReviewerInner() {
                 className={`inline-flex items-center gap-1 text-sm ${theme.accent} hover:underline`}>
                 Open in Salesforce <ExternalLink className="w-3 h-3" />
               </a>
-            </div>
-
-            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
-              <h3 className="font-semibold text-gray-900">Document links</h3>
-              <ul className="text-sm space-y-2">
-                <li>
-                  <span className="text-gray-500">Unsigned quote: </span>
-                  <a href={docs.unsignedQuoteUrl} target="_blank" rel="noopener noreferrer" className={`${theme.accent} hover:underline break-all`}>
-                    {docs.unsignedQuoteUrl}
-                  </a>
-                </li>
-                <li>
-                  <span className="text-gray-500">Signed quote: </span>
-                  <a href={docs.signedQuoteUrl} target="_blank" rel="noopener noreferrer" className={`${theme.accent} hover:underline break-all`}>
-                    {docs.signedQuoteUrl}
-                  </a>
-                </li>
-                {docs.purchaseOrderUrl ? (
-                  <li>
-                    <span className="text-gray-500">Purchase order: </span>
-                    <a href={docs.purchaseOrderUrl} target="_blank" rel="noopener noreferrer" className={`${theme.accent} hover:underline break-all`}>
-                      {docs.purchaseOrderUrl}
-                    </a>
-                  </li>
-                ) : (
-                  <li className="text-gray-400">Purchase order: not provided</li>
-                )}
-              </ul>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-3">
