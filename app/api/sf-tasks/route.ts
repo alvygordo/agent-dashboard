@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import jsforce from 'jsforce'
+import {
+  fetchLatestCasesByOpp,
+  isLegalCaseStatusTask,
+  isSendNnrTask,
+  sfCaseUrl,
+} from '@/lib/sf-renewal-cases'
 
 type SFTaskRecord = {
   Id: string
@@ -34,10 +40,10 @@ export async function GET(req: NextRequest) {
        WHERE IsClosed = false
        AND Owner.Email = '${safeEmail}'
        ORDER BY ActivityDate ASC NULLS LAST, Priority DESC NULLS LAST
-       LIMIT 200`
+       LIMIT 200`,
     )
 
-    const tasks = result.records.map(t => ({
+    const baseTasks = result.records.map((t) => ({
       id:       t.Id,
       subject:  t.Subject,
       whatId:   t.WhatId ?? null,
@@ -46,7 +52,54 @@ export async function GET(req: NextRequest) {
       dueDate:  t.ActivityDate,
       taskUrl:  `${instanceUrl}/lightning/r/Task/${t.Id}/view`,
       oppUrl:   t.WhatId ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view` : null,
+      caseLink: null as { url: string; status: string; label: string } | null,
     }))
+
+    const legalOppIds = baseTasks
+      .filter((t) => isLegalCaseStatusTask(t.subject) && t.whatId)
+      .map((t) => t.whatId!)
+    const nnrOppIds = baseTasks
+      .filter((t) => isSendNnrTask(t.subject) && t.whatId)
+      .map((t) => t.whatId!)
+
+    const [legalCases, nnrCases] = await Promise.all([
+      fetchLatestCasesByOpp(conn, legalOppIds, '%Legal Review%'),
+      fetchLatestCasesByOpp(conn, nnrOppIds, '%NNR%'),
+    ])
+
+    const tasks = baseTasks.map((t) => {
+      if (!t.whatId) return t
+
+      if (isLegalCaseStatusTask(t.subject)) {
+        const legalCase = legalCases.get(t.whatId)
+        if (legalCase) {
+          return {
+            ...t,
+            caseLink: {
+              url: sfCaseUrl(instanceUrl, legalCase.id),
+              status: legalCase.status,
+              label: 'Legal Case',
+            },
+          }
+        }
+      }
+
+      if (isSendNnrTask(t.subject)) {
+        const nnrCase = nnrCases.get(t.whatId)
+        if (nnrCase) {
+          return {
+            ...t,
+            caseLink: {
+              url: sfCaseUrl(instanceUrl, nnrCase.id),
+              status: nnrCase.status,
+              label: 'NNR Case',
+            },
+          }
+        }
+      }
+
+      return t
+    })
 
     return NextResponse.json({ tasks, userEmail: email })
   } catch (err: unknown) {
