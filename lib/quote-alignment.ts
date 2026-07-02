@@ -1,8 +1,11 @@
 import type { AnalysisFlag, AnalysisSeverity } from '@/lib/quote-review-analysis'
 import {
+  datesAlign,
   formatFieldValue,
   paymentTermsAlign,
   type ParsedDocument,
+  termDurationMonths,
+  termsAlign,
   valuesAlign,
 } from '@/lib/quote-field-extract'
 import { formatUsDate } from '@/lib/sf-field-format'
@@ -192,8 +195,30 @@ function buildAlignmentRows(
     },
     { field: 'Support plan', mode: 'three-way', sf: sfFields.supportPlan, signed: sq?.supportPlan ?? null, po: poFields?.supportPlan ?? null },
     { field: 'Users / seats / qty', mode: 'sf-signed', sf: sfFields.quantity, signed: sq?.quantity ?? null, po: poFields?.quantity ?? null },
-    { field: 'Renewal date', mode: 'sf-signed', sf: sfFields.renewalDate, signed: sq?.renewalDate ?? null, po: poFields?.renewalDate ?? null },
-    { field: 'Expiry date', mode: 'sf-signed', sf: sfFields.expiryDate, signed: sq?.expiryDate ?? null, po: poFields?.expiryDate ?? null },
+    {
+      field: 'Renewal date (term start)',
+      mode: 'signed-po',
+      sf: sfFields.renewalDate,
+      signed: sq?.renewalDate ?? null,
+      po: poFields?.renewalDate ?? null,
+      sfDisplay: sfFields.renewalDate ? `${sfFields.renewalDate} (current term)` : '—',
+    },
+    {
+      field: 'Expiry date (term end)',
+      mode: 'signed-po',
+      sf: sfFields.expiryDate,
+      signed: sq?.expiryDate ?? null,
+      po: poFields?.expiryDate ?? null,
+      sfDisplay: sfFields.expiryDate ? `${sfFields.expiryDate} (current term)` : '—',
+    },
+    {
+      field: 'Term duration',
+      mode: 'signed-po',
+      sf: '—',
+      signed: sq?.term ?? null,
+      po: poFields?.term ?? null,
+      sfDisplay: '—',
+    },
     {
       field: 'Service provider / supplier',
       mode: 'signed-po',
@@ -223,6 +248,22 @@ function buildAlignmentRows(
       else status = paymentTermsAlign(sq.paymentTerms, poFields.paymentTerms) ? 'aligned' : 'mismatch'
     } else if (spec.field === 'Service provider / supplier') {
       status = compareAlignment('signed-po', null, sq?.supplierName ?? null, poFields?.supplierName ?? null, poProvided)
+    } else if (spec.field === 'Renewal date (term start)') {
+      status = !sq?.renewalDate && !poFields?.renewalDate
+        ? 'unknown'
+        : !sq?.renewalDate || !poFields?.renewalDate
+          ? 'unknown'
+          : datesAlign(sq.renewalDate, poFields.renewalDate) ? 'aligned' : 'mismatch'
+    } else if (spec.field === 'Expiry date (term end)') {
+      status = !sq?.expiryDate && !poFields?.expiryDate
+        ? 'unknown'
+        : !sq?.expiryDate || !poFields?.expiryDate
+          ? 'unknown'
+          : datesAlign(sq.expiryDate, poFields.expiryDate) ? 'aligned' : 'mismatch'
+    } else if (spec.field === 'Term duration') {
+      if (!sq?.term && !poFields?.term) status = 'unknown'
+      else if (!sq?.term || !poFields?.term) status = 'unknown'
+      else status = termsAlign(sq.term, poFields.term) ? 'aligned' : 'mismatch'
     } else {
       status = compareAlignment(spec.mode, spec.sf, signedVal, poVal, poProvided)
     }
@@ -262,6 +303,44 @@ function signedFieldsFromSf(sf: SfAlignmentInput) {
     quantity: sf.userCount != null ? String(sf.userCount) : null,
     renewalDate: sf.renewalDate ? formatUsDate(sf.renewalDate) : null,
     expiryDate: sf.expiryDate ? formatUsDate(sf.expiryDate) : null,
+  }
+}
+
+function compareTermPair(
+  label: string,
+  leftVal: string | null,
+  rightVal: string | null,
+  leftLabel: string,
+  rightLabel: string,
+): QuoteComparisonCheck {
+  if (!leftVal && !rightVal) {
+    return {
+      check: label,
+      severity: 'pending',
+      finding: `Could not extract ${label.toLowerCase()} from either document — verify manually.`,
+    }
+  }
+  if (!leftVal || !rightVal) {
+    return {
+      check: label,
+      severity: 'pending',
+      finding: `${label} found on ${leftVal ? leftLabel : rightLabel} only (${leftVal ?? rightVal}) — open both documents to confirm.`,
+    }
+  }
+  if (termsAlign(leftVal, rightVal)) {
+    const lm = termDurationMonths(leftVal)
+    const rm = termDurationMonths(rightVal)
+    const durationNote = lm != null ? ` (${lm} months)` : ''
+    return {
+      check: label,
+      severity: 'pass',
+      finding: `Match${durationNote} — ${leftVal} (${leftLabel}) = ${rightVal} (${rightLabel}).`,
+    }
+  }
+  return {
+    check: label,
+    severity: 'warn',
+    finding: `Mismatch — ${leftLabel}: ${leftVal}; ${rightLabel}: ${rightVal}. Flag for review.`,
   }
 }
 
@@ -456,7 +535,7 @@ export function buildDocumentAnalysis(
   quoteChecks.push(
     compareQuotePair('Quote number', u?.quoteNumber ?? null, s?.quoteNumber ?? null),
     compareQuotePair('Pricing / total', u?.totalAmount ?? null, s?.totalAmount ?? null),
-    compareQuotePair('Term length', u?.term ?? sfTermLabel(sf), s?.term ?? sfTermLabel(sf)),
+    compareTermPair('Term length', u?.term ?? sfTermLabel(sf), s?.term ?? sfTermLabel(sf), 'unsigned', 'signed'),
     compareQuotePair('Product', sf.product ?? u?.product ?? null, s?.product ?? null),
     compareQuotePair('Quantity / users', u?.quantity ?? null, s?.quantity ?? null),
   )
@@ -466,11 +545,19 @@ export function buildDocumentAnalysis(
       return { check: 'Signature', severity: 'pending', finding: 'Could not read signed quote — verify signature manually.' }
     }
     const { signerName, signedDate } = signed.fields
+    const customerBlockNote = signed.fields.notes.some((n) => n.includes('For Customer'))
     if (signerName && signedDate) {
       return {
         check: 'Signature',
         severity: 'pass',
-        finding: `Signature detected — ${signerName}, dated ${signedDate}.`,
+        finding: `Customer signature detected — ${signerName}, dated ${signedDate}.`,
+      }
+    }
+    if (signerName?.includes('Customer signature block') || customerBlockNote) {
+      return {
+        check: 'Signature',
+        severity: 'pending',
+        finding: `Customer signature block found (For Customer)${signerName && !signerName.includes('block present') ? ` — ${signerName}` : ''}${signedDate ? `, dated ${signedDate}` : ''}. Confirm signatory name and date on the PDF.`,
       }
     }
     if (signerName || signedDate) {
@@ -483,7 +570,7 @@ export function buildDocumentAnalysis(
     return {
       check: 'Signature',
       severity: 'warn',
-      finding: 'No signature block detected in extracted text — confirm the quote is signed, by whom, and when on the PDF.',
+      finding: 'No signature block detected in extracted text — look for the For Customer signature block (name and date).',
     }
   })()
   quoteChecks.push(signatureCheck)
@@ -590,6 +677,7 @@ export function buildDocumentAnalysis(
         compareFieldPair('Price / total', s?.totalAmount ?? null, p?.totalAmount ?? null, 'signed quote', 'PO'),
         compareFieldPair('Product scope', s?.product ?? sf.product ?? null, p?.product ?? null, 'signed quote', 'PO'),
         comparePaymentTermsPair(s?.paymentTerms ?? null, p?.paymentTerms ?? null, 'signed quote', 'PO'),
+        compareTermPair('Term duration', s?.term ?? null, p?.term ?? null, 'signed quote', 'PO'),
         compareFieldPair('Quantity', s?.quantity ?? null, p?.quantity ?? null, 'signed quote', 'PO'),
       )
 
@@ -622,13 +710,22 @@ export function buildDocumentAnalysis(
   const alignedCount = alignmentRows.filter((r) => r.status === 'aligned').length
   const mismatchCount = alignmentRows.filter((r) => r.status === 'mismatch').length
   const pdfFailed = errors.length > 0
-  const alignmentSummary = pdfFailed
+  const qtyNotes = [
+    ...(signed?.fields.notes ?? []),
+    ...(po?.fields.notes ?? []),
+  ].filter((n) => /line item|footer mentions/i.test(n))
+
+  let alignmentSummary = pdfFailed
     ? 'PDF extraction failed for one or more documents — Salesforce values shown; open PDFs manually to complete alignment.'
     : mismatchCount > 0
       ? `${mismatchCount} field${mismatchCount === 1 ? '' : 's'} mismatch across Salesforce, signed quote, and PO — review the alignment table.`
       : alignedCount >= 5
         ? `Core fields align across sources (${alignedCount} matched).`
         : 'Limited extraction — use the alignment table and open PDFs to confirm all fields.'
+
+  if (qtyNotes.length > 0) {
+    alignmentSummary += ` Note: ${qtyNotes.join(' ')}`
+  }
 
   return {
     unsigned,

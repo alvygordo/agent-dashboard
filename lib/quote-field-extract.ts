@@ -66,6 +66,21 @@ const QUOTE_NUMBER_REJECT = new Set([
 
 const SUPPLIER_REJECT = /^(shall|have|no|reference|confidential|prepared|the|a|an|agree|supplier|vendor|services?|goods?|ion|item)\b/i
 
+const MONTH_NAMES = [
+  'january', 'february', 'march', 'april', 'may', 'june',
+  'july', 'august', 'september', 'october', 'november', 'december',
+]
+
+function parseSpelledDate(value: string): string | null {
+  const m = value.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/i)
+  if (!m) return null
+  const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase())
+  if (monthIdx < 0) return null
+  const mm = String(monthIdx + 1).padStart(2, '0')
+  const dd = String(parseInt(m[2], 10)).padStart(2, '0')
+  return `${mm}/${dd}/${m[3]}`
+}
+
 function isSupplierGarbage(value: string): boolean {
   const v = value.trim()
   if (v.length < 3 || v.length > 60) return true
@@ -84,6 +99,78 @@ function isPlausibleDate(value: string): boolean {
   const v = value.trim()
   return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v)
     || /^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/.test(v)
+    || /^\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4}$/.test(v)
+}
+
+/** Normalize any extracted date to YYYY-MM-DD for comparison. */
+export function normalizeDateForCompare(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null
+  const v = value.trim()
+
+  const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+
+  const us = v.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})$/)
+  if (us) {
+    const y = us[3].length === 2 ? `20${us[3]}` : us[3]
+    return `${y}-${String(parseInt(us[1], 10)).padStart(2, '0')}-${String(parseInt(us[2], 10)).padStart(2, '0')}`
+  }
+
+  const dmy = v.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/i)
+  if (dmy) {
+    const monthIdx = MONTH_NAMES.indexOf(dmy[2].toLowerCase())
+    if (monthIdx >= 0) {
+      return `${dmy[3]}-${String(monthIdx + 1).padStart(2, '0')}-${String(parseInt(dmy[1], 10)).padStart(2, '0')}`
+    }
+  }
+
+  const spelled = parseSpelledDate(v)
+  if (spelled) {
+    const p = spelled.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (p) return `${p[3]}-${p[1]}-${p[2]}`
+  }
+
+  return null
+}
+
+export function datesAlign(a: string | null | undefined, b: string | null | undefined): boolean {
+  const na = normalizeDateForCompare(a)
+  const nb = normalizeDateForCompare(b)
+  if (!na || !nb) return false
+  return na === nb
+}
+
+function parseFlexibleDate(value: string): string | null {
+  const v = value.trim()
+  if (isPlausibleDate(v)) return v
+
+  const dmy = v.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/i)
+  if (dmy) {
+    const monthIdx = MONTH_NAMES.indexOf(dmy[2].toLowerCase())
+    if (monthIdx >= 0) {
+      const mm = String(monthIdx + 1).padStart(2, '0')
+      const dd = String(parseInt(dmy[1], 10)).padStart(2, '0')
+      return `${mm}/${dd}/${dmy[3]}`
+    }
+  }
+
+  return parseSpelledDate(v)
+}
+
+function extractLabeledFlexibleDate(text: string, labels: string[]): string | null {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(
+      `${escaped}\\s*:?\\s*(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+      'i',
+    )
+    const m = text.match(re)
+    if (m?.[1]) {
+      const parsed = parseFlexibleDate(m[1])
+      if (parsed) return parsed
+    }
+  }
+  return null
 }
 
 function cleanExtracted(value: string | null | undefined, maxLen = 80): string | null {
@@ -120,14 +207,33 @@ function extractLabeledDate(text: string, labels: string[]): string | null {
   return null
 }
 
-function extractDates(text: string): { renewal: string | null; expiry: string | null } {
-  let renewal = extractLabeledDate(text, [
-    'Renewal Date', 'Renewal date', 'Subscription Renewal Date', 'Renewal',
+function extractDates(text: string, pageTexts?: string[]): { renewal: string | null; expiry: string | null } {
+  const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
+
+  let renewal = extractLabeledFlexibleDate(headerScope, [
+    'Term Start Date', 'Term start date', 'Renewal Date', 'Renewal date',
     'Subscription Start Date', 'Start Date', 'Service Start Date', 'Effective Date',
   ])
-  let expiry = extractLabeledDate(text, [
-    'Expiry Date', 'Expiration Date', 'Subscription End Date', 'End Date',
-    'Current Term End', 'Term End', 'Contract End', 'Service End Date',
+  let expiry = extractLabeledFlexibleDate(headerScope, [
+    'Term End Date', 'Term end date', 'Expiry Date', 'Expiration Date',
+    'Subscription End Date', 'End Date', 'Current Term End', 'Term End', 'Contract End',
+  ])
+
+  if (!renewal || !expiry) {
+    const fallback = extractDatesFromFullText(text)
+    if (!renewal) renewal = fallback.renewal
+    if (!expiry) expiry = fallback.expiry
+  }
+
+  return { renewal, expiry }
+}
+
+function extractDatesFromFullText(text: string): { renewal: string | null; expiry: string | null } {
+  let renewal = extractLabeledFlexibleDate(text, [
+    'Term Start Date', 'Renewal Date', 'Subscription Start Date', 'Start Date', 'Effective Date',
+  ])
+  let expiry = extractLabeledFlexibleDate(text, [
+    'Term End Date', 'Expiry Date', 'Expiration Date', 'Subscription End Date', 'End Date', 'Term End',
   ])
 
   const periodRange = text.match(
@@ -155,21 +261,6 @@ function extractDates(text: string): { renewal: string | null; expiry: string | 
   }
 
   return { renewal, expiry }
-}
-
-const MONTH_NAMES = [
-  'january', 'february', 'march', 'april', 'may', 'june',
-  'july', 'august', 'september', 'october', 'november', 'december',
-]
-
-function parseSpelledDate(value: string): string | null {
-  const m = value.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/i)
-  if (!m) return null
-  const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase())
-  if (monthIdx < 0) return null
-  const mm = String(monthIdx + 1).padStart(2, '0')
-  const dd = String(parseInt(m[2], 10)).padStart(2, '0')
-  return `${mm}/${dd}/${m[3]}`
 }
 
 function extractProduct(text: string, productHint?: string | null): string | null {
@@ -231,15 +322,62 @@ function extractPoProduct(text: string, productHint?: string | null, pageTexts?:
     return true
   })
 
+  if (productHint && deprioritized.length === 0) return null
+
   return deprioritized[0] ?? null
 }
 
-function extractQuantity(text: string): string | null {
-  const orgs = text.match(/(?:Orgs?|Organi[sz]ations?)\s*(?:permitted\s*)?(?:is|:)?\s*(\d+)/i)
-  if (orgs) return orgs[1]
+function extractLineItemQuantities(text: string, pageTexts?: string[]): { qty: string | null; note: string | null } {
+  const scope = pageTexts?.slice(0, 4).join('\n') ?? text.slice(0, 20_000)
 
-  const orgCount = text.match(/\b(\d{1,6})\s+organi[sz]ations?\b/i)
-  if (orgCount) return orgCount[1]
+  if (!/item\s*code|item\s*description|qty/i.test(scope)) {
+    return { qty: null, note: null }
+  }
+
+  const qtys: number[] = []
+
+  // Item Code … Qty … Description … Amount  (e.g. Cls-SA-Pla-STA 1 CloudSense Platform … $308,776.42)
+  const rowPatterns = [
+    /\b([A-Z]{2,3}[-][A-Za-z0-9-]{4,})\s+(\d{1,6})\s+(?:CloudSense|Cloudsense|[A-Z][A-Za-z])/gi,
+    /\b([A-Za-z0-9][\w-]{5,})\s+(\d{1,6})\s+[A-Za-z][^\n$]{8,90}\$\s*[\d,]+/g,
+  ]
+
+  for (const pat of rowPatterns) {
+    for (const m of scope.matchAll(pat)) {
+      const n = parseInt(m[2], 10)
+      if (!Number.isNaN(n) && n > 0 && n <= 100_000) qtys.push(n)
+    }
+    if (qtys.length > 0) break
+  }
+
+  if (qtys.length === 0) return { qty: null, note: null }
+
+  const unique = [...new Set(qtys)]
+  if (unique.length === 1) {
+    const note = qtys.length > 1 ? `Line item table: ${qtys.length} rows × qty ${unique[0]}` : null
+    return { qty: String(unique[0]), note }
+  }
+
+  const sum = qtys.reduce((a, b) => a + b, 0)
+  return {
+    qty: String(sum),
+    note: `Line item table qtys: ${qtys.join(' + ')} = ${sum}`,
+  }
+}
+
+function extractQuantity(text: string, pageTexts?: string[], notes?: string[]): string | null {
+  const table = extractLineItemQuantities(text, pageTexts)
+  if (table.qty) {
+    if (table.note && notes) notes.push(table.note)
+    return table.qty
+  }
+
+  const footerOrgs = text.match(/(?:Orgs?|Organi[sz]ations?)\s*(?:permitted\s*)?(?:is|:)?\s*(\d+)/i)
+    ?? text.match(/\b(\d{1,6})\s+organi[sz]ations?\b/i)
+
+  if (footerOrgs && notes) {
+    notes.push(`Footer mentions ${footerOrgs[1]} orgs — no line-item qty table found; verify manually.`)
+  }
 
   const fromLabel = extractAfterLabels(text, ['Quantity', 'Qty', 'Users', 'User Count', 'Seats', 'Licenses'])
   if (fromLabel && !/item description|unit price/i.test(fromLabel)) {
@@ -281,25 +419,37 @@ export function paymentTermsAlign(a: string | null, b: string | null): boolean {
   return valuesAlign(na, nb)
 }
 
-function extractPaymentTerms(text: string): string | null {
-  const paymentEq = text.match(/PAYMENT\s*=?\s*(\d+)/i)
-  if (paymentEq) return `Net ${paymentEq[1]}`
+function extractPaymentTerms(text: string, pageTexts?: string[], docKind?: 'quote' | 'po'): string | null {
+  const headerScope = pageTexts?.slice(0, 3).join('\n') ?? text.slice(0, 6000)
+  const scopes = docKind === 'po' ? [headerScope] : [headerScope, text]
 
-  const paymentTermsLine = text.match(/Payment\s*Terms\s*:?\s*([^\n]{3,50})/i)
-  if (paymentTermsLine) {
-    const normalized = normalizePaymentTerms(paymentTermsLine[1])
-    if (normalized) return normalized
+  for (const scope of scopes) {
+    const paymentPatterns = [
+      /PAYMENT\s*(?:=|:)\s*(\d{1,3})\b/i,
+      /\bPAYMENT\b[\s:=\-]*(\d{1,3})\b/i,
+      /PAYMENT\s*\n\s*(\d{1,3})\b/i,
+    ]
+    for (const pat of paymentPatterns) {
+      const m = scope.match(pat)
+      if (m?.[1]) return `Net ${m[1]}`
+    }
+
+    const termsNetConcat = scope.match(/Payment\s*Terms\s*Net\s*(\d+)/i)
+      ?? scope.match(/PaymentTermsNet\s*(\d+)/i)
+    if (termsNetConcat) return `Net ${termsNetConcat[1]}`
+
+    const paymentTermsLine = scope.match(/Payment\s*Terms\s*:?\s*([^\n]{3,50})/i)
+    if (paymentTermsLine) {
+      const normalized = normalizePaymentTerms(paymentTermsLine[1])
+      if (normalized) return normalized
+    }
   }
 
-  const termsNet = text.match(/Payment\s*Terms\s*Net\s*(\d+)/i)
-  if (termsNet) return `Net ${termsNet[1]}`
+  if (docKind === 'po') return null
 
   const netMatches = [...text.matchAll(/\bNet\s*(\d+)\b/gi)].map((m) => parseInt(m[1], 10))
   const standardNets = netMatches.filter((n) => [10, 15, 30, 45, 60, 90].includes(n))
   if (standardNets.length > 0) return `Net ${standardNets[0]}`
-
-  const net = text.match(/\bNet\s*\d+\b/i)
-  if (net) return net[0].replace(/\s+/g, ' ')
 
   return normalizePaymentTerms(
     extractAfterLabels(text, ['Payment Terms', 'Payment Term', 'Terms of Payment', 'Billing Terms', 'PAYMENT']),
@@ -328,6 +478,9 @@ function extractTotal(text: string, expectedTotal?: string | null): string | nul
         if (!best || diff < best.diff) best = { raw: x.raw, diff }
       }
       if (best && best.diff / expectedNum <= 0.05) return `$${best.raw}`
+      // PO with expected total — do not fall back to unrelated large amounts
+      if (best && best.diff / expectedNum <= 0.25) return `$${best.raw}`
+      return null
     }
   }
 
@@ -349,6 +502,14 @@ function extractTerm(text: string, termHint?: string | number | null, pageTexts?
 }
 
 function extractTermFromScope(text: string, termHint?: string | number | null): string | null {
+  const duration = text.match(/Term\s*Duration\s*:?\s*(\d+)\s*(month|months|mo|year|years|yr)\b/i)
+  if (duration) {
+    const n = parseInt(duration[1], 10)
+    const unit = duration[2].toLowerCase()
+    if (/year|yr/.test(unit)) return `${n * 12} months`
+    return `${n} months`
+  }
+
   const hintMonths = termHint != null ? String(termHint).match(/(\d+)/)?.[1] : null
 
   if (/twelve\s*\(\s*12\s*\)\s*months?\b/i.test(text)) return '12 months'
@@ -391,13 +552,21 @@ function extractSupplier(
   mirrorSupplier?: string | null,
   pageTexts?: string[],
 ): string | null {
-  const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 3000)
+  const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
+
+  const providerBlock = headerScope.match(
+    /Service\s*Provider\s*:?\s*\n?\s*([A-Z][A-Za-z0-9\s&.,'-]{2,50})/i,
+  )
+  if (providerBlock?.[1]) {
+    const company = providerBlock[1].split(/[,(\n]/)[0]?.trim()
+    if (company && !isSupplierGarbage(company)) return company
+  }
 
   for (const name of KNOWN_SUPPLIERS) {
     if (new RegExp(`\\b${name}\\b`, 'i').test(headerScope)) return name
   }
 
-  const labeled = extractAfterLabels(text, [
+  const labeled = extractAfterLabels(headerScope, [
     'Service Provider', 'Service Provider Name', 'Supplier', 'Supplier Name', 'Vendor', 'Sold By',
   ])
   if (labeled) {
@@ -471,34 +640,53 @@ function extractQuoteNumberFromScope(
 function extractSignature(
   text: string,
   pageTexts?: string[],
-): { signerName: string | null; signedDate: string | null } {
+): { signerName: string | null; signedDate: string | null; customerBlockFound: boolean } {
   const chunks = pageTexts?.length
-    ? [...pageTexts.slice(-3), text.slice(Math.max(0, text.length - 4000))]
+    ? [...pageTexts.slice(-4), text.slice(Math.max(0, text.length - 6000))]
     : [text]
 
   let signer: string | null = null
   let signedDate: string | null = null
+  let customerBlockFound = false
 
   for (const chunk of chunks) {
+    const customerBlock = chunk.match(
+      /For\s+Customer\s*:?\s*([\s\S]{0,900}?)(?=For\s+Service\s+Provider|For\s+Supplier|$)/i,
+    )
+    if (customerBlock) {
+      customerBlockFound = true
+      const block = customerBlock[1]
+      signer =
+        firstMatch(block, /(?:Name|Signed\s*by|Signatory|Authorized\s*(?:Signatory|Representative))\s*:?\s*([A-Za-z][A-Za-z\s.'-]{2,50})/i)
+        ?? firstMatch(block, /\/s\/\s*([A-Za-z][A-Za-z\s.'-]{2,50})/i)
+        ?? firstMatch(block, /(?:By)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z.'-]+){1,3})/)
+      signedDate =
+        extractLabeledFlexibleDate(block, ['Date', 'Date Signed', 'Signed Date', 'Signature Date'])
+        ?? firstMatch(block, /Date\s*:?\s*(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4}|\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i)
+    }
+
     if (!signer) {
       signer =
         firstMatch(chunk, /(?:Signed\s*by|Signatory|Authorized\s*(?:Signatory|Representative|Signature)|Accepted\s+(?:and\s+)?Agreed)\s*:?\s*([A-Za-z][A-Za-z\s.'-]{2,50})/i)
         ?? firstMatch(chunk, /\/s\/\s*([A-Za-z][A-Za-z\s.'-]{2,50})/i)
-        ?? firstMatch(chunk, /(?:By|Name)\s*:?\s*([A-Z][a-z]+(?:\s+[A-Z][a-z.'-]+){1,3})(?:\s|,|\n|$)/)
         ?? (/(?:DocuSign|Adobe\s*Sign|Docusigned)/i.test(chunk) ? 'DocuSign' : null)
     }
 
     if (!signedDate) {
       signedDate =
-        extractLabeledDate(chunk, ['Date Signed', 'Signed Date', 'Execution Date', 'Signature Date', 'Date'])
+        extractLabeledFlexibleDate(chunk, ['Date Signed', 'Signed Date', 'Execution Date', 'Signature Date', 'Date'])
         ?? firstMatch(chunk, /(?:Signed|Executed)\s*(?:on|:)?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i)
-        ?? firstMatch(chunk, /Date\s*:?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i)
     }
+  }
+
+  if (customerBlockFound && !signer) {
+    signer = 'Customer signature block present'
   }
 
   return {
     signerName: signer ? cleanExtracted(signer, 50) : null,
-    signedDate: signedDate && isPlausibleDate(signedDate) ? signedDate : null,
+    signedDate: signedDate ? (parseFlexibleDate(signedDate) ?? signedDate) : null,
+    customerBlockFound,
   }
 }
 
@@ -557,14 +745,14 @@ export function extractFieldsFromText(
   options?: ExtractOptions,
 ): ExtractedDocumentFields {
   const pageTexts = options?.pageTexts
-  const dates = extractDates(text)
+  const dates = extractDates(text, pageTexts)
   const poNumber = firstMatch(text, /\bPO\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
     ?? firstMatch(text, /\bPurchase\s*Order\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
 
   const quoteNumber = extractQuoteNumber(text, options?.titleHint, options?.quoteNumberHint, pageTexts)
   const signature = options?.docKind === 'quote'
     ? extractSignature(text, pageTexts)
-    : { signerName: null, signedDate: null }
+    : { signerName: null, signedDate: null, customerBlockFound: false }
 
   const product = options?.docKind === 'po'
     ? extractPoProduct(text, options?.productHint, pageTexts)
@@ -577,6 +765,9 @@ export function extractFieldsFromText(
   if (options?.docKind === 'po' && !product) {
     notes.push('No product name found on PO — line items may be generic or missing.')
   }
+  if (signature.customerBlockFound) {
+    notes.push('Customer signature block detected (For Customer).')
+  }
   if (text.length < 80) {
     notes.push('Very little text extracted — document may be scanned/image-only.')
   }
@@ -588,11 +779,11 @@ export function extractFieldsFromText(
     address: null,
     product,
     supportPlan: extractSupportPlan(text),
-    quantity: extractQuantity(text),
+    quantity: extractQuantity(text, pageTexts, notes),
     renewalDate: dates.renewal,
     expiryDate: dates.expiry,
     supplierName: extractSupplier(text, options?.mirrorSupplier, pageTexts),
-    paymentTerms: extractPaymentTerms(text),
+    paymentTerms: extractPaymentTerms(text, pageTexts, options?.docKind),
     quoteNumber,
     poNumber,
     totalAmount: extractTotal(text, options?.expectedTotal),
@@ -660,6 +851,25 @@ export function valuesAlign(a: string | null | undefined, b: string | null | und
   if (!na || !nb) return false
   if (na === nb) return true
   return na.includes(nb) || nb.includes(na)
+}
+
+export function termDurationMonths(value: string | null | undefined): number | null {
+  if (!value?.trim()) return null
+  const v = value.trim()
+  const months = v.match(/(\d+)\s*(?:month|months|mo)\b/i)
+  if (months) return parseInt(months[1], 10)
+  const years = v.match(/(\d+(?:\.\d+)?)\s*(?:year|years|yr)\b/i)
+  if (years) return Math.round(parseFloat(years[1]) * 12)
+  const bare = v.match(/^(\d+)$/)
+  if (bare) return parseInt(bare[1], 10)
+  return null
+}
+
+export function termsAlign(a: string | null | undefined, b: string | null | undefined): boolean {
+  const ma = termDurationMonths(a)
+  const mb = termDurationMonths(b)
+  if (ma != null && mb != null) return ma === mb
+  return valuesAlign(a, b)
 }
 
 export function formatFieldValue(value: string | null | undefined): string {

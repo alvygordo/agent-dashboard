@@ -262,7 +262,7 @@ export function buildQuoteReviewAnalysis(
 
 export function severityLabel(severity: AnalysisSeverity): string {
   if (severity === 'pass') return 'Pass'
-  if (severity === 'warn') return 'Warn'
+  if (severity === 'warn') return 'Warning'
   if (severity === 'fail') return 'Fail'
   return 'Manual'
 }
