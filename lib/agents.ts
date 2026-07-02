@@ -106,6 +106,18 @@ export const workflows: Workflow[] = [
     ],
   },
   {
+    id: "signed-quote-reviewer",
+    name: "Signed Quote Reviewer",
+    description: "Validate signed quote documents against Salesforce — paste doc links, review flags, and generate a provisioning template.",
+    status: "active",
+    steps: [
+      { agentId: "sf-agent", label: "Opportunity", requiresConfirmation: false },
+      { agentId: "contract-finder", label: "Documents", requiresConfirmation: false },
+      { agentId: "contract-analyzer", label: "Analysis & flags", requiresConfirmation: false },
+      { agentId: "provisioning-assistant-gem", label: "Provisioning template", requiresConfirmation: false },
+    ],
+  },
+  {
     id: "opp-prep-automation",
     name: "Opp Prep Automation",
     description: "Full automated renewal analysis — contract data, NS data, SF data, and comparison summary.",
