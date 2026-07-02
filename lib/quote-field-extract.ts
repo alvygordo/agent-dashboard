@@ -629,9 +629,9 @@ function extractQuoteNumberFromScope(
     const m = text.match(re)
     if (!m) continue
     const val = (m[1] ?? m[0]).trim()
-    if (!QUOTE_NUMBER_REJECT.has(val.toLowerCase()) && !GARBAGE_VALUES.test(val)) {
-      return val.startsWith('Q') || val.startsWith('q') ? val.replace(/^q/i, 'Q') : val
-    }
+    if (QUOTE_NUMBER_REJECT.has(val.toLowerCase()) || GARBAGE_VALUES.test(val)) continue
+    if (/^\d{4,8}$/.test(val) && !quoteNumberHint) continue
+    return val.startsWith('Q') || val.startsWith('q') ? val.replace(/^q/i, 'Q') : val
   }
 
   return null

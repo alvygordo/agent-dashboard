@@ -75,6 +75,8 @@ export type SfAlignmentInput = {
   currentTerm: string | number | null
   currentArr: number | null
   paymentTerms?: string | null
+  primaryQuoteNumber?: string | null
+  winType?: string | null
 }
 
 export type AlignmentSummary = DocumentAnalysisBundle['alignment']
@@ -477,6 +479,30 @@ function normalizeQuoteRef(value: string): string {
   return value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
 }
 
+function looksLikeSfQuoteNumber(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false
+  return /^Q[-_]?\d{4,8}$/i.test(value.trim())
+}
+
+/** Prefer primary quote # from Salesforce over stray numeric hits in PDF text. */
+export function resolveQuoteNumber(
+  extracted: string | null | undefined,
+  sfPrimaryQuoteNumber: string | null | undefined,
+): string | null {
+  const sf = sfPrimaryQuoteNumber?.trim() || null
+  const ext = extracted?.trim() || null
+
+  if (sf && looksLikeSfQuoteNumber(sf)) {
+    if (!ext) return sf
+    if (normalizeQuoteRef(ext) === normalizeQuoteRef(sf)) return ext.startsWith('Q') ? ext : sf
+    if (/^\d+$/.test(ext)) return sf
+    if (!looksLikeSfQuoteNumber(ext)) return sf
+  }
+
+  if (ext && looksLikeSfQuoteNumber(ext)) return ext
+  return ext ?? sf
+}
+
 function poReferencesQuoteNumber(
   po: ParsedDocument | null,
   quoteNumber: string | null,
@@ -718,10 +744,12 @@ export function buildDocumentAnalysis(
   let poSummary = 'No purchase order provided.'
   let poOverall: AnalysisSeverity = 'pending'
 
-  const quoteNumber =
+  const quoteNumber = resolveQuoteNumber(
     mode === 'po-received'
       ? (u?.quoteNumber ?? null)
-      : (s?.quoteNumber ?? u?.quoteNumber ?? null)
+      : (s?.quoteNumber ?? u?.quoteNumber ?? null),
+    sf.primaryQuoteNumber,
+  )
   const poNumber = p?.poNumber ?? null
   const quoteRef = mode === 'po-received'
     ? poReferencesQuoteNumber(po, u?.quoteNumber ?? null)

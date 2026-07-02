@@ -3,6 +3,7 @@
 import { theme } from "@/lib/theme"
 import {
   buildSfBaselineAlignment,
+  resolveQuoteNumber,
   type DocumentAnalysisBundle,
   type AlignmentRow,
   type AlignmentStatus,
@@ -224,38 +225,6 @@ function AlignmentTable({
   )
 }
 
-function SfReferenceTable({ opp }: { opp: OppSummary }) {
-  const rows = [
-    { field: "Win Type", value: opp.winType ?? "—" },
-    { field: "Product", value: opp.product ?? "—" },
-    { field: "Support plan", value: opp.supportPlan ?? "—" },
-    { field: "Users / seats", value: opp.userCount != null ? String(opp.userCount) : "—" },
-    { field: "Renewal date", value: opp.renewalDate ? formatUsDate(opp.renewalDate) : "—" },
-    { field: "Expiry date", value: opp.expiryDate ? formatUsDate(opp.expiryDate) : "—" },
-    { field: "Primary contact", value: opp.primaryContactDisplay },
-  ]
-  return (
-    <div className="overflow-hidden rounded-lg border border-gray-200">
-      <table className="w-full text-sm">
-        <thead className="bg-gray-50 border-b border-gray-200">
-          <tr>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[40%]">Opportunity field</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Value from Salesforce</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-100 bg-white">
-          {rows.map((row) => (
-            <tr key={row.field}>
-              <td className="px-4 py-2.5 font-medium text-gray-900">{row.field}</td>
-              <td className="px-4 py-2.5 text-gray-800">{row.value}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 export function QuoteReviewAnalysisReport({
   analysis,
   opp,
@@ -293,8 +262,10 @@ export function QuoteReviewAnalysisReport({
   const showPoReceived = mode === 'po-received'
   const showPoSection = comparePo && (poProvided || showPoReceived)
   const quoteColumnLabel = showPoReceived ? 'Unsigned quote' : 'Signed quote'
-  const extractedQuoteNumber =
-    docAnalysis?.documentIds.quoteNumber ?? primaryQuoteNumber ?? null
+  const extractedQuoteNumber = resolveQuoteNumber(
+    docAnalysis?.documentIds.quoteNumber,
+    primaryQuoteNumber,
+  )
   const extractedPoNumber = docAnalysis?.documentIds.poNumber ?? null
   const byCategory = (cat: AnalysisFlag["category"]) =>
     analysis.flags.filter((f) => f.category === cat)
@@ -590,22 +561,6 @@ export function QuoteReviewAnalysisReport({
           )}
         </section>
       )}
-
-      <section className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Entry gate</h3>
-        <FlagTable flags={byCategory("gate")} />
-      </section>
-
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Salesforce reference</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Values pulled from the opportunity for the provisioning template. When you review the PDFs, confirm these match the signed quote — this is not an automated check yet.
-          </p>
-        </div>
-        <SfReferenceTable opp={opp} />
-        <FlagTable flags={byCategory("salesforce")} />
-      </section>
     </div>
   )
 }

@@ -17,6 +17,7 @@ import {
 } from "@/lib/sf-field-format"
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
+import { resolveQuoteNumber } from "@/lib/quote-alignment"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
 import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
@@ -82,7 +83,10 @@ const STEPS: { stepName: Step; label: string }[] = [
 
 const STEP_COUNT = STEPS.length
 
-function buildProvisioningTemplate(opp: OppData): string {
+function buildProvisioningTemplate(
+  opp: OppData,
+  docAnalysis?: DocumentAnalysisBundle | null,
+): string {
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
   const months = formatTermMonthsOnly(opp.currentTerm)
@@ -97,16 +101,24 @@ function buildProvisioningTemplate(opp: OppData): string {
   const userCount = opp.userCount != null && opp.userCount > 0
     ? String(opp.userCount)
     : "[Insert User/Seat Count]"
+  const winType = opp.winType ?? "[Insert Win Type]"
+  const quoteNumber =
+    resolveQuoteNumber(docAnalysis?.documentIds.quoteNumber, opp.primaryQuoteNumber)
+    ?? "[Insert Quote #]"
+  const poNumber = docAnalysis?.documentIds.poNumber ?? null
   const reason =
     opp.winType === "PO Received"
       ? `Customer is renewing for ${termLabel}`
       : `Customer signed the quote / is renewing for ${termLabel}`
 
-  return [
+  const lines = [
     `${endUser} : ${months} months ${product} License Renewal`,
     "",
     `Customer Name: ${customer}`,
     `End user: ${endUser}`,
+    `Win Type: ${winType}`,
+    `Quote #: ${quoteNumber}`,
+    ...(poNumber ? [`PO #: ${poNumber}`] : []),
     `Netsuite subscription: ${nsLink}`,
     `Salesforce opportunity: ${opp.oppUrl}`,
     `Product: ${product}`,
@@ -118,7 +130,8 @@ function buildProvisioningTemplate(opp: OppData): string {
     `Contact person: ${contact}`,
     "Reason for request:",
     reason,
-  ].join("\n")
+  ]
+  return lines.join("\n")
 }
 
 function SignedQuoteReviewerInner() {
@@ -304,6 +317,8 @@ function SignedQuoteReviewerInner() {
           currentTerm: oppData.currentTerm,
           currentArr: oppData.currentArr,
           paymentTerms: oppData.currentTerm != null ? String(oppData.currentTerm) : null,
+          primaryQuoteNumber: oppData.primaryQuoteNumber,
+          winType: oppData.winType,
         },
       }),
     })
@@ -357,7 +372,7 @@ function SignedQuoteReviewerInner() {
 
   async function copyTemplate() {
     if (!oppData) return
-    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData))
+    await navigator.clipboard.writeText(buildProvisioningTemplate(oppData, docAnalysis))
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
   }
@@ -392,7 +407,7 @@ function SignedQuoteReviewerInner() {
       }, docAnalysis)
     : null
   const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
-  const template = oppData ? buildProvisioningTemplate(oppData) : ""
+  const template = oppData ? buildProvisioningTemplate(oppData, docAnalysis) : ""
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -708,6 +723,66 @@ function SignedQuoteReviewerInner() {
               <p className="text-sm text-gray-500 mt-1">
                 Copy the template below for provisioning. For PO-only renewals, values come from the unsigned quote / Salesforce opportunity.
               </p>
+            </div>
+
+            <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Salesforce reference</h3>
+                <p className="text-xs text-gray-500 mt-1">
+                  Values pulled from the opportunity for the provisioning template. When you review the PDFs, confirm these match the signed quote — this is not an automated check yet.
+                </p>
+              </div>
+              <div className="overflow-hidden rounded-lg border border-gray-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[40%]">Opportunity field</th>
+                      <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Value from Salesforce</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {[
+                      { field: "Win Type", value: oppData.winType ?? "—" },
+                      { field: "Product", value: oppData.product ?? "—" },
+                      { field: "Support plan", value: oppData.supportPlan ?? "—" },
+                      {
+                        field: "Users / seats",
+                        value: oppData.userCount != null ? String(oppData.userCount) : "—",
+                      },
+                      {
+                        field: "Renewal date",
+                        value: oppData.renewalDate ? formatUsDate(oppData.renewalDate) : "—",
+                      },
+                      {
+                        field: "Expiry date",
+                        value: oppData.expiryDate ? formatUsDate(oppData.expiryDate) : "—",
+                      },
+                      {
+                        field: "Primary contact",
+                        value:
+                          oppData.primaryContact?.display
+                          ?? formatContactLine(oppData.primaryContact),
+                      },
+                      {
+                        field: "Quote #",
+                        value:
+                          resolveQuoteNumber(
+                            docAnalysis?.documentIds.quoteNumber,
+                            oppData.primaryQuoteNumber,
+                          ) ?? "—",
+                      },
+                      ...(docAnalysis?.documentIds.poNumber
+                        ? [{ field: "PO #", value: docAnalysis.documentIds.poNumber }]
+                        : []),
+                    ].map((row) => (
+                      <tr key={row.field}>
+                        <td className="px-4 py-2.5 font-medium text-gray-900">{row.field}</td>
+                        <td className="px-4 py-2.5 text-gray-800">{row.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">

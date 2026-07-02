@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
           productHint,
           docKind: 'quote',
           termHint,
+          quoteNumberHint: body.salesforce.primaryQuoteNumber ?? null,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })
@@ -126,7 +127,10 @@ export async function POST(req: NextRequest) {
           docKind: 'quote',
           termHint,
           expectedTotal: unsignedResult.doc?.fields.totalAmount ?? arrHint,
-          quoteNumberHint: unsignedResult.doc?.fields.quoteNumber ?? null,
+          quoteNumberHint:
+            unsignedResult.doc?.fields.quoteNumber
+            ?? body.salesforce.primaryQuoteNumber
+            ?? null,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })
