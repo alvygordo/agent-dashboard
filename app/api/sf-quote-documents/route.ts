@@ -28,8 +28,8 @@ async function analyzeUrl(
 
   try {
     const downloaded = await downloadContentDocument(conn, trimmed)
-    if (!downloaded) {
-      return { doc: null, error: 'Could not download document — check the Salesforce link and file access.' }
+    if (!downloaded.ok) {
+      return { doc: null, error: downloaded.message }
     }
 
     const ext = (downloaded.fileExtension ?? '').toLowerCase()
@@ -92,7 +92,10 @@ export async function POST(req: NextRequest) {
       poProvided,
     )
 
-    return NextResponse.json(analysis)
+    return NextResponse.json({
+      ...analysis,
+      connectedOrg: conn.instanceUrl ?? null,
+    })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })

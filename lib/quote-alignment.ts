@@ -51,6 +51,7 @@ export type DocumentAnalysisBundle = {
     summary: string
     overallSeverity: AnalysisSeverity
   }
+  connectedOrg?: string | null
 }
 
 export type SfAlignmentInput = {
@@ -107,6 +108,7 @@ function compareThree(
   signed: string | null,
   po: string | null,
   poProvided: boolean,
+  downloadState: { signedFailed: boolean; poFailed: boolean },
 ): { status: AlignmentStatus; note: string | null } {
   const hasSf = Boolean(sf?.trim())
   const hasSigned = Boolean(signed?.trim())
@@ -124,7 +126,14 @@ function compareThree(
     if (signedAlignsSf === true) return { status: 'aligned', note: 'Signed quote matches Salesforce.' }
     if (signedAlignsSf === false) return { status: 'mismatch', note: 'Signed quote differs from Salesforce.' }
     if (hasSigned && !hasSf) return { status: 'partial', note: 'Found on signed quote only — verify in Salesforce.' }
-    if (hasSf && !hasSigned) return { status: 'unknown', note: 'Could not extract from signed quote PDF.' }
+    if (hasSf && !hasSigned) {
+      return {
+        status: 'unknown',
+        note: downloadState.signedFailed
+          ? 'Signed quote PDF could not be downloaded — verify against Salesforce value manually.'
+          : 'Could not extract this field from signed quote PDF.',
+      }
+    }
     return { status: 'unknown', note: 'Insufficient data to compare.' }
   }
 
@@ -139,10 +148,20 @@ function compareThree(
     return { status: 'mismatch', note: parts.join('; ') || 'Values differ across sources.' }
   }
   if (!hasPo) {
-    return { status: 'unknown', note: 'PO link provided but field not found in PO document.' }
+    return {
+      status: 'unknown',
+      note: downloadState.poFailed
+        ? 'PO PDF could not be downloaded — open the PO link manually.'
+        : 'PO link provided but this field was not found in extracted PO text.',
+    }
   }
   if (!hasSigned) {
-    return { status: 'unknown', note: 'Could not extract from signed quote.' }
+    return {
+      status: 'unknown',
+      note: downloadState.signedFailed
+        ? 'Signed quote PDF could not be downloaded.'
+        : 'Could not extract this field from signed quote PDF.',
+    }
   }
   return { status: 'partial', note: 'Some sources missing — verify manually.' }
 }
@@ -152,10 +171,14 @@ function buildAlignmentRows(
   signed: ParsedDocument | null,
   po: ParsedDocument | null,
   poProvided: boolean,
+  errors: { doc: string; message: string }[] = [],
 ): AlignmentRow[] {
   const sfFields = signedFieldsFromSf(sf)
   const sq = signed?.fields ?? null
   const poFields = po?.fields ?? null
+  const signedFailed = errors.some((e) => e.doc === 'signed')
+  const poFailed = errors.some((e) => e.doc === 'po')
+  const downloadState = { signedFailed, poFailed }
 
   const specs: {
     field: string
@@ -177,12 +200,24 @@ function buildAlignmentRows(
   ]
 
   return specs.map((spec) => {
-    const { status, note } = compareThree(spec.sf, spec.signed, spec.po, poProvided)
+    const { status, note } = compareThree(spec.sf, spec.signed, spec.po, poProvided, downloadState)
+    const signedDisplay = spec.signed
+      ? formatFieldValue(spec.signed)
+      : signedFailed
+        ? 'Not extracted (download failed)'
+        : '—'
+    const poDisplay = !poProvided
+      ? 'N/A'
+      : spec.po
+        ? formatFieldValue(spec.po)
+        : poFailed
+          ? 'Not extracted (download failed)'
+          : '—'
     return {
       field: spec.field,
       salesforce: formatFieldValue(spec.sf),
-      signedQuote: formatFieldValue(spec.signed),
-      purchaseOrder: poProvided ? formatFieldValue(spec.po) : 'N/A',
+      signedQuote: signedDisplay,
+      purchaseOrder: poDisplay,
       status,
       note,
     }
@@ -254,9 +289,18 @@ function compareQuotePair(
 function detectTcConflict(
   signed: ParsedDocument | null,
   po: ParsedDocument | null,
+  poProvided: boolean,
+  errors: { doc: string; message: string }[],
 ): { level: DocumentAnalysisBundle['poAudit']['tcConflict']; note: string } {
-  if (!po) {
+  if (!poProvided) {
     return { level: 'not_applicable', note: 'No PO document provided.' }
+  }
+  if (!po) {
+    const poError = errors.find((e) => e.doc === 'po')?.message
+    return {
+      level: 'unknown',
+      note: poError ?? 'PO could not be downloaded — open the PO PDF to check for conflicting purchaser terms.',
+    }
   }
   if (po.fields.notes.some((n) => n.includes('only a PO number'))) {
     return {
@@ -296,6 +340,23 @@ export function buildDocumentAnalysis(
   const p = po?.fields ?? null
 
   const quoteChecks: QuoteComparisonCheck[] = []
+
+  const unsignedErr = errors.find((e) => e.doc === 'unsigned')
+  const signedErr = errors.find((e) => e.doc === 'signed')
+  if (unsignedErr) {
+    quoteChecks.push({
+      check: 'Unsigned quote PDF',
+      severity: 'fail',
+      finding: unsignedErr.message,
+    })
+  }
+  if (signedErr) {
+    quoteChecks.push({
+      check: 'Signed quote PDF',
+      severity: 'fail',
+      finding: signedErr.message,
+    })
+  }
 
   const unsignedPages = unsigned?.pageCount ?? null
   const signedPages = signed?.pageCount ?? null
@@ -438,7 +499,7 @@ export function buildDocumentAnalysis(
     }
   }
 
-  const tc = detectTcConflict(signed, po)
+  const tc = detectTcConflict(signed, po, poProvided, errors)
   if (poProvided && po) {
     poChecks.push({
       check: 'T&C conflict check',
@@ -448,16 +509,19 @@ export function buildDocumentAnalysis(
     if (tc.level === 'possible_conflict' && poOverall === 'pass') poOverall = 'warn'
   }
 
-  const alignmentRows = buildAlignmentRows(sf, signed, po, poProvided)
+  const alignmentRows = buildAlignmentRows(sf, signed, po, poProvided, errors)
   const dataStatuses = alignmentRows.map((r) => r.status)
   const alignmentOverall = severityFromStatuses(dataStatuses)
   const alignedCount = alignmentRows.filter((r) => r.status === 'aligned').length
   const mismatchCount = alignmentRows.filter((r) => r.status === 'mismatch').length
-  const alignmentSummary = mismatchCount > 0
-    ? `${mismatchCount} field${mismatchCount === 1 ? '' : 's'} mismatch across Salesforce, signed quote, and PO — review the alignment table.`
-    : alignedCount >= 5
-      ? `Core fields align across sources (${alignedCount} matched).`
-      : 'Limited extraction — use the alignment table and open PDFs to confirm all fields.'
+  const pdfFailed = errors.length > 0
+  const alignmentSummary = pdfFailed
+    ? 'PDF extraction failed for one or more documents — Salesforce values shown; open PDFs manually to complete alignment.'
+    : mismatchCount > 0
+      ? `${mismatchCount} field${mismatchCount === 1 ? '' : 's'} mismatch across Salesforce, signed quote, and PO — review the alignment table.`
+      : alignedCount >= 5
+        ? `Core fields align across sources (${alignedCount} matched).`
+        : 'Limited extraction — use the alignment table and open PDFs to confirm all fields.'
 
   return {
     unsigned,

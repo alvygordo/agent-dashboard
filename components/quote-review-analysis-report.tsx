@@ -318,6 +318,25 @@ export function QuoteReviewAnalysisReport({
           Document analysis failed: {docAnalysisError}. Open the PDFs manually to complete review.
         </div>
       )}
+      {docAnalysis?.errors && docAnalysis.errors.length > 0 && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 space-y-2">
+          <p className="font-medium">PDF download / extraction issues</p>
+          <ul className="list-disc pl-5 space-y-1">
+            {docAnalysis.errors.map((err) => (
+              <li key={err.doc}>
+                <span className="font-medium capitalize">{err.doc}:</span> {err.message}
+              </li>
+            ))}
+          </ul>
+          {docAnalysis.connectedOrg && (
+            <p className="text-xs text-red-800 pt-1">
+              API connected to: {docAnalysis.connectedOrg.replace('.my.salesforce.com', '')}
+              {' — '}
+              If your links are production Lightning URLs but this is sandbox, open each file in sandbox Salesforce and paste those links instead.
+            </p>
+          )}
+        </div>
+      )}
 
       <section className="space-y-3">
         <div>
@@ -384,7 +403,12 @@ export function QuoteReviewAnalysisReport({
                   {poProvided ? "Awaiting PO PDF analysis." : "No PO provided."}
                 </span>
               )}
-              {docAnalysis?.poAudit.tcConflict === "none_detected" && (
+              {docAnalysis && poProvided && !docAnalysis.purchaseOrder && (
+                <span className="text-amber-800">
+                  {docAnalysis.poAudit.tcConflictNote}
+                </span>
+              )}
+              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "none_detected" && (
                 <span className="text-green-800">No conflict detected in extracted text.</span>
               )}
               {docAnalysis?.poAudit.tcConflict === "possible_conflict" && (
