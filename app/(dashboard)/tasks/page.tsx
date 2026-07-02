@@ -22,6 +22,7 @@ const UNBLOCKER_URL     = "https://trilogy-core-renewals-sales-ops.vercel.app/"
 
 type TaskAction =
   | { type: "copilot"; oppName: string }
+  | { type: "sq-reviewer"; oppName: string }
   | { type: "gem";     url: string; label: string }
   | { type: "agent";   url: string; label: string }
 
@@ -32,6 +33,11 @@ function getTaskAction(subject: string, whatName: string | null): TaskAction | n
   // HVO / Non-HVO Opp Prep → Co-Pilot
   if (sub.includes("hvo opp prep")) {
     return { type: "copilot", oppName: whatName ?? subject }
+  }
+
+  // Signed Quote Review → SQ Reviewer
+  if (sub.includes("signed quote review")) {
+    return { type: "sq-reviewer", oppName: whatName ?? subject }
   }
 
   // Khoros + license/provisioning → Instance Extractor Gem
@@ -98,6 +104,8 @@ export default function TasksPage() {
   function handleAction(action: TaskAction) {
     if (action.type === "copilot") {
       window.open(`/workflow/opp-prep-copilot?opp=${encodeURIComponent(action.oppName)}&autostart=true`, "_blank")
+    } else if (action.type === "sq-reviewer") {
+      window.open(`/workflow/signed-quote-reviewer?opp=${encodeURIComponent(action.oppName)}&autostart=true`, "_blank")
     } else {
       window.open(action.url, "_blank")
     }
@@ -215,6 +223,12 @@ export default function TasksPage() {
                             <Button size="sm" onClick={() => handleAction(action)}
                               className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
                               <Play className="w-3 h-3" /> Co-Pilot
+                            </Button>
+                          )
+                          if (action.type === "sq-reviewer") return (
+                            <Button size="sm" onClick={() => handleAction(action)}
+                              className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
+                              <Play className="w-3 h-3" /> SQ Reviewer
                             </Button>
                           )
                           if (action.type === "gem") return (
