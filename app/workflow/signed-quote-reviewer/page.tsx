@@ -196,8 +196,6 @@ function SignedQuoteReviewerInner() {
   }
 
   function selectOpp(opp: OppData) {
-    setOppData(opp)
-    setOppMatches([])
     const plan = resolveQuoteReviewMode({
       winType: opp.winType,
       primaryQuoteStatus: opp.primaryQuoteStatus,
@@ -205,6 +203,14 @@ function SignedQuoteReviewerInner() {
       purchaseOrderLink: opp.purchaseOrderLink,
       purchaseOrderRequirement: opp.purchaseOrderRequirement,
     })
+    setOppData({
+      ...opp,
+      reviewMode: plan.mode,
+      reviewModeTitle: plan.title,
+      reviewModeDescription: plan.description,
+      comparePo: plan.comparePo,
+    })
+    setOppMatches([])
     setDocs({
       unsignedQuoteUrl:
         plan.requiresUnsigned
@@ -532,9 +538,11 @@ function SignedQuoteReviewerInner() {
                 <p className="text-gray-700">
                   <span className="font-medium">Win Type:</span> {oppData.winType ?? "—"}
                 </p>
-                {oppData.primaryQuoteStatus && (
+                {oppData.primaryQuoteId && (
                   <p className="text-gray-700">
-                    <span className="font-medium">Primary quote status:</span> {oppData.primaryQuoteStatus}
+                    <span className="font-medium">Primary quote status:</span>{" "}
+                    {oppData.primaryQuoteStatus ?? "—"}
+                    {oppData.primaryQuoteNumber ? ` (${oppData.primaryQuoteNumber})` : ""}
                   </p>
                 )}
                 {oppData.purchaseOrderRequirement && (

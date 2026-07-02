@@ -14,7 +14,6 @@ type QuoteRow = {
   Id: string
   Name?: string
   SBQQ__Status__c?: string | null
-  SBQQ__QuoteNumber__c?: string | null
 }
 
 type LinkRow = {
@@ -46,32 +45,13 @@ function pickUnsignedAttachment(links: LinkRow[]): LinkRow | null {
   return unsigned ?? candidates[0] ?? null
 }
 
-export async function fetchPrimaryQuoteInfo(
+async function fetchQuoteAttachments(
   conn: Connection,
   quoteId: string,
   lightningBase: string,
-): Promise<PrimaryQuoteInfo | null> {
-  const safeId = quoteId.replace(/'/g, "\\'")
-
-  let quote: QuoteRow | undefined
+): Promise<{ url: string | null; title: string | null }> {
   try {
-    const q = await conn.query<QuoteRow>(
-      `SELECT Id, Name, SBQQ__Status__c, SBQQ__QuoteNumber__c
-       FROM SBQQ__Quote__c
-       WHERE Id = '${safeId}'
-       LIMIT 1`,
-    )
-    quote = q.records[0]
-  } catch {
-    return null
-  }
-
-  if (!quote) return null
-
-  let attachmentUrl: string | null = null
-  let attachmentTitle: string | null = null
-
-  try {
+    const safeId = quoteId.replace(/'/g, "\\'")
     const links = await conn.query<LinkRow>(
       `SELECT ContentDocumentId, ContentDocument.Title, ContentDocument.FileExtension
        FROM ContentDocumentLink
@@ -80,21 +60,60 @@ export async function fetchPrimaryQuoteInfo(
        LIMIT 25`,
     )
     const pick = pickUnsignedAttachment(links.records)
-    if (pick?.ContentDocumentId) {
-      attachmentUrl = contentDocumentUrl(lightningBase, pick.ContentDocumentId)
-      attachmentTitle = pick.ContentDocument?.Title ?? null
+    if (!pick?.ContentDocumentId) return { url: null, title: null }
+    return {
+      url: contentDocumentUrl(lightningBase, pick.ContentDocumentId),
+      title: pick.ContentDocument?.Title ?? null,
     }
   } catch {
-    // attachments optional
+    return { url: null, title: null }
+  }
+}
+
+async function fetchQuoteRow(conn: Connection, quoteId: string): Promise<QuoteRow | null> {
+  const safeId = quoteId.replace(/'/g, "\\'")
+  try {
+    const q = await conn.query<QuoteRow>(
+      `SELECT Id, Name, SBQQ__Status__c
+       FROM SBQQ__Quote__c
+       WHERE Id = '${safeId}'
+       LIMIT 1`,
+    )
+    return q.records[0] ?? null
+  } catch {
+    return null
+  }
+}
+
+export async function fetchPrimaryQuoteInfo(
+  conn: Connection,
+  quoteId: string,
+  lightningBase: string,
+  statusHint?: string | null,
+): Promise<PrimaryQuoteInfo | null> {
+  const quote = await fetchQuoteRow(conn, quoteId)
+  const attachments = await fetchQuoteAttachments(conn, quoteId, lightningBase)
+
+  if (!quote) {
+    if (!statusHint?.trim() && !attachments.url) return null
+    return {
+      id: quoteId,
+      name: null,
+      quoteNumber: null,
+      status: statusHint?.trim() ?? null,
+      quoteUrl: `${lightningBase}/lightning/r/SBQQ__Quote__c/${quoteId}/view`,
+      unsignedAttachmentUrl: attachments.url,
+      unsignedAttachmentTitle: attachments.title,
+    }
   }
 
   return {
     id: quote.Id,
     name: quote.Name ?? null,
-    quoteNumber: quote.SBQQ__QuoteNumber__c ?? quote.Name ?? null,
-    status: quote.SBQQ__Status__c ?? null,
+    quoteNumber: quote.Name ?? null,
+    status: quote.SBQQ__Status__c ?? statusHint?.trim() ?? null,
     quoteUrl: `${lightningBase}/lightning/r/SBQQ__Quote__c/${quote.Id}/view`,
-    unsignedAttachmentUrl: attachmentUrl,
-    unsignedAttachmentTitle: attachmentTitle,
+    unsignedAttachmentUrl: attachments.url,
+    unsignedAttachmentTitle: attachments.title,
   }
 }

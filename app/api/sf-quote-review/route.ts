@@ -40,6 +40,8 @@ const QUOTE_REVIEW_FIELDS = [
   'Current_Subscription_End_Date__c',
   'CurrentContractHasAutoRenewalClause__c',
   'SBQQ__PrimaryQuote__c',
+  'SBQQ__PrimaryQuote__r.Name',
+  'SBQQ__PrimaryQuote__r.SBQQ__Status__c',
 ]
 
 const OPTIONAL_OPP_FIELDS = [
@@ -198,6 +200,11 @@ async function mapOpp(
   const winType = (opp.Win_Type__c as string | null) ?? null
   const product = (opp.Product__c as string | null) ?? null
   const primaryQuoteId = (opp.SBQQ__PrimaryQuote__c as string | null) ?? null
+  const primaryQuoteRel = opp.SBQQ__PrimaryQuote__r as {
+    Name?: string
+    SBQQ__Status__c?: string | null
+  } | null | undefined
+  const primaryQuoteStatusHint = primaryQuoteRel?.SBQQ__Status__c ?? null
 
   const quoteLines = primaryQuoteId ? await fetchQuoteLines(conn, primaryQuoteId) : []
   const supportFromQuote = parseSupportPlanFromLines(quoteLines)
@@ -209,8 +216,13 @@ async function mapOpp(
   const contact = await bestContact(conn, opp.Id)
 
   const primaryQuote = primaryQuoteId
-    ? await fetchPrimaryQuoteInfo(conn, primaryQuoteId, lightningBase)
+    ? await fetchPrimaryQuoteInfo(conn, primaryQuoteId, lightningBase, primaryQuoteStatusHint)
     : null
+
+  const primaryQuoteStatus =
+    primaryQuote?.status ?? primaryQuoteStatusHint ?? null
+  const primaryQuoteNumber =
+    primaryQuote?.quoteNumber ?? primaryQuoteRel?.Name ?? null
 
   const signedQuoteUrl = extractUrlFromSfField(opp.Signed_Quote__c)
   const purchaseOrderLink = extractUrlFromSfField(opp.Purchase_Order_Link__c)
@@ -218,7 +230,7 @@ async function mapOpp(
 
   const reviewPlan = resolveQuoteReviewMode({
     winType,
-    primaryQuoteStatus: primaryQuote?.status ?? null,
+    primaryQuoteStatus,
     signedQuoteUrl,
     purchaseOrderLink,
     purchaseOrderRequirement:
@@ -240,8 +252,8 @@ async function mapOpp(
       purchaseOrderRequirement != null ? String(purchaseOrderRequirement) : null,
     comparePo: reviewPlan.comparePo,
     primaryQuoteId,
-    primaryQuoteStatus: primaryQuote?.status ?? null,
-    primaryQuoteNumber: primaryQuote?.quoteNumber ?? null,
+    primaryQuoteStatus,
+    primaryQuoteNumber,
     primaryQuoteUrl: primaryQuote?.quoteUrl ?? null,
     unsignedQuoteAttachmentUrl: primaryQuote?.unsignedAttachmentUrl ?? null,
     unsignedQuoteAttachmentTitle: primaryQuote?.unsignedAttachmentTitle ?? null,
