@@ -18,6 +18,14 @@ type CaseRecord = {
   Next_Renewal_Opportunity__c: string
 }
 
+/** Case statuses that mean NNR work is complete — exclude from tracker. */
+const COMPLETE_NNR_CASE_STATUSES = new Set(['shared with customer'])
+
+function isCompleteNnrCase(status: string | null | undefined): boolean {
+  if (!status?.trim()) return false
+  return COMPLETE_NNR_CASE_STATUSES.has(status.trim().toLowerCase())
+}
+
 export async function GET(req: NextRequest) {
   const email = req.cookies.get('agent_dashboard_user')?.value
   if (!email) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
@@ -71,22 +79,24 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    const opps = result.records.map(o => {
-      const nnrCase = caseByOpp.get(o.Id)
-      return {
-        id:          o.Id,
-        name:        o.Name,
-        nnrDeadline: o.Customer_Termination_Deadline__c,
-        nnrRequired: o.NNR_Required__c,
-        nnrSent:     o.NNR_Sent__c,
-        renewalDate: o.Renewal_Date__c,
-        salesOps:    o.Sales_Ops__r?.Name ?? 'Unassigned',
-        oppUrl:      `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
-        caseId:      nnrCase?.Id ?? null,
-        caseStatus:  nnrCase?.Status ?? null,
-        caseUrl:     nnrCase ? `${instanceUrl}/lightning/r/Case/${nnrCase.Id}/view` : null,
-      }
-    })
+    const opps = result.records
+      .map(o => {
+        const nnrCase = caseByOpp.get(o.Id)
+        return {
+          id:          o.Id,
+          name:        o.Name,
+          nnrDeadline: o.Customer_Termination_Deadline__c,
+          nnrRequired: o.NNR_Required__c,
+          nnrSent:     o.NNR_Sent__c,
+          renewalDate: o.Renewal_Date__c,
+          salesOps:    o.Sales_Ops__r?.Name ?? 'Unassigned',
+          oppUrl:      `${instanceUrl}/lightning/r/Opportunity/${o.Id}/view`,
+          caseId:      nnrCase?.Id ?? null,
+          caseStatus:  nnrCase?.Status ?? null,
+          caseUrl:     nnrCase ? `${instanceUrl}/lightning/r/Case/${nnrCase.Id}/view` : null,
+        }
+      })
+      .filter((opp) => !isCompleteNnrCase(opp.caseStatus))
 
     // Group by Sales Ops
     const grouped: Record<string, typeof opps> = {}
