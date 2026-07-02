@@ -55,6 +55,7 @@ async function analyzeUrl(
       mirrorSupplier: extractOptions?.mirrorSupplier,
       termHint: extractOptions?.termHint,
       quoteNumberHint: extractOptions?.quoteNumberHint,
+      quantityHint: extractOptions?.quantityHint,
       renewalDateHint: extractOptions?.renewalDateHint,
       expiryDateHint: extractOptions?.expiryDateHint,
     })
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
     const arrHint = body.salesforce.currentArr != null
       ? `$${body.salesforce.currentArr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : null
+    const quantityHint = body.salesforce.userCount
 
     const unsignedResult = needsUnsigned && body.unsignedQuoteUrl?.trim()
       ? await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', {
@@ -116,6 +118,8 @@ export async function POST(req: NextRequest) {
           docKind: 'quote',
           termHint,
           quoteNumberHint: body.salesforce.primaryQuoteNumber ?? null,
+          quantityHint,
+          expectedTotal: arrHint,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })
@@ -131,6 +135,7 @@ export async function POST(req: NextRequest) {
             unsignedResult.doc?.fields.quoteNumber
             ?? body.salesforce.primaryQuoteNumber
             ?? null,
+          quantityHint,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })

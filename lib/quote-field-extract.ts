@@ -46,6 +46,7 @@ export type ExtractOptions = {
   termHint?: string | number | null
   titleHint?: string | null
   quoteNumberHint?: string | null
+  quantityHint?: string | number | null
   renewalDateHint?: string | null
   expiryDateHint?: string | null
   pageTexts?: string[]
@@ -327,7 +328,37 @@ function extractPoProduct(text: string, productHint?: string | null, pageTexts?:
   return deprioritized[0] ?? null
 }
 
-function extractLineItemQuantities(text: string, pageTexts?: string[]): { qty: string | null; note: string | null } {
+function digitsOnly(value: string | null | undefined): string {
+  return value?.replace(/[^\d]/g, '') ?? ''
+}
+
+function looksLikeStrayAmount(
+  value: string,
+  expectedTotal?: string | null,
+  quantityHint?: string | number | null,
+): boolean {
+  const digits = digitsOnly(value)
+  if (!digits) return true
+  const n = parseInt(digits, 10)
+  if (Number.isNaN(n) || n <= 0) return true
+
+  const totalDigits = digitsOnly(expectedTotal)
+  if (totalDigits && digits === totalDigits) return true
+
+  const hint = quantityHint != null ? Number(quantityHint) : null
+  if (hint != null && !Number.isNaN(hint) && hint > 0 && n !== hint) {
+    if (n >= 1000 && n > hint * 50) return true
+  }
+
+  return false
+}
+
+function extractLineItemQuantities(
+  text: string,
+  pageTexts?: string[],
+  expectedTotal?: string | null,
+  quantityHint?: string | number | null,
+): { qty: string | null; note: string | null } {
   const scope = pageTexts?.slice(0, 4).join('\n') ?? text.slice(0, 20_000)
 
   if (!/item\s*code|item\s*description|qty/i.test(scope)) {
@@ -345,7 +376,9 @@ function extractLineItemQuantities(text: string, pageTexts?: string[]): { qty: s
   for (const pat of rowPatterns) {
     for (const m of scope.matchAll(pat)) {
       const n = parseInt(m[2], 10)
-      if (!Number.isNaN(n) && n > 0 && n <= 100_000) qtys.push(n)
+      if (!Number.isNaN(n) && n > 0 && n <= 100_000 && !looksLikeStrayAmount(String(n), expectedTotal, quantityHint)) {
+        qtys.push(n)
+      }
     }
     if (qtys.length > 0) break
   }
@@ -365,8 +398,14 @@ function extractLineItemQuantities(text: string, pageTexts?: string[]): { qty: s
   }
 }
 
-function extractQuantity(text: string, pageTexts?: string[], notes?: string[]): string | null {
-  const table = extractLineItemQuantities(text, pageTexts)
+function extractQuantity(
+  text: string,
+  pageTexts?: string[],
+  notes?: string[],
+  quantityHint?: string | number | null,
+  expectedTotal?: string | null,
+): string | null {
+  const table = extractLineItemQuantities(text, pageTexts, expectedTotal, quantityHint)
   if (table.qty) {
     if (table.note && notes) notes.push(table.note)
     return table.qty
@@ -382,11 +421,17 @@ function extractQuantity(text: string, pageTexts?: string[], notes?: string[]): 
   const fromLabel = extractAfterLabels(text, ['Quantity', 'Qty', 'Users', 'User Count', 'Seats', 'Licenses'])
   if (fromLabel && !/item description|unit price/i.test(fromLabel)) {
     const num = fromLabel.match(/\d+/)
-    if (num) return num[0]
+    if (num && !looksLikeStrayAmount(num[0], expectedTotal, quantityHint)) return num[0]
   }
 
   const qtyMatch = text.match(/\b(\d+)\s*(?:users?|seats?|licenses?)\b/i)
-  return qtyMatch ? qtyMatch[1] : null
+  if (qtyMatch && !looksLikeStrayAmount(qtyMatch[1], expectedTotal, quantityHint)) return qtyMatch[1]
+
+  if (quantityHint != null && Number(quantityHint) > 0) {
+    return String(quantityHint)
+  }
+
+  return null
 }
 
 function extractSupportPlan(text: string): string | null {
@@ -779,7 +824,7 @@ export function extractFieldsFromText(
     address: null,
     product,
     supportPlan: extractSupportPlan(text),
-    quantity: extractQuantity(text, pageTexts, notes),
+    quantity: extractQuantity(text, pageTexts, notes, options?.quantityHint, options?.expectedTotal),
     renewalDate: dates.renewal,
     expiryDate: dates.expiry,
     supplierName: extractSupplier(text, options?.mirrorSupplier, pageTexts),
@@ -806,6 +851,7 @@ export function parseDocumentText(
     mirrorSupplier?: string | null
     termHint?: string | number | null
     quoteNumberHint?: string | null
+    quantityHint?: string | number | null
     renewalDateHint?: string | null
     expiryDateHint?: string | null
   },
@@ -819,6 +865,7 @@ export function parseDocumentText(
     termHint: meta.termHint,
     titleHint: meta.title,
     quoteNumberHint: meta.quoteNumberHint,
+    quantityHint: meta.quantityHint,
     renewalDateHint: meta.renewalDateHint,
     expiryDateHint: meta.expiryDateHint,
     pageTexts,
@@ -850,6 +897,8 @@ export function valuesAlign(a: string | null | undefined, b: string | null | und
   const nb = normalizeForCompare(b)
   if (!na || !nb) return false
   if (na === nb) return true
+  // Pure numbers must match exactly — avoid "1" matching inside "74136".
+  if (/^\d+$/.test(na) && /^\d+$/.test(nb)) return false
   return na.includes(nb) || nb.includes(na)
 }
 
