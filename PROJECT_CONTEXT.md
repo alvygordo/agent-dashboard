@@ -1,6 +1,30 @@
 # SO Agent Dashboard — Full Project Context & Restore Guide
 **Owner:** Alvy Gordo (alvy.gordo@trilogy.com)
-**Last updated:** Jun 26, 2026
+**Last updated:** Jul 2, 2026
+
+---
+
+## 🚨 Deployment rules (ALWAYS follow)
+
+### Official URLs — use these only
+| Environment | URL | Vercel project | Vercel team |
+|---|---|---|---|
+| **Production (SO)** | https://so-agent-dashboard.vercel.app | `so-agent-dashboard` | `dmitrybakaev-1061s-projects` |
+| **Sandbox** | https://sandbox-agent-dashboard.vercel.app | `sandbox-agent-dashboard` | `alvygordos-projects` |
+
+### ❌ Do NOT use — duplicate / wrong project
+| URL | Vercel project | Why |
+|---|---|---|
+| https://agent-dashboard-rho-murex.vercel.app | `agent-dashboard` | **Not the SO dashboard.** Separate Vercel project under `alvygordos-projects`. Same GitHub repo, duplicate deployment surface. **Never deploy here.** |
+
+### How to deploy (correct way)
+1. Commit and push to GitHub — **never** `vercel deploy` for production/sandbox unless explicitly troubleshooting with the correct project linked.
+2. **`main` branch** → auto-deploys **prod** (`so-agent-dashboard`)
+3. **`sandbox` branch** → auto-deploys **sandbox** (`sandbox-agent-dashboard`)
+4. After pushing, verify at the official URLs above — not `agent-dashboard-rho-murex` or `agent-dashboard-*.vercel.app`.
+
+### Agent / Cursor rule
+When the user asks to "deploy to prod" or "push to prod", the target is always **https://so-agent-dashboard.vercel.app** (`so-agent-dashboard` on `dmitrybakaev-1061s-projects`). Sandbox is **https://sandbox-agent-dashboard.vercel.app**. Do not link, deploy, or reference `agent-dashboard` / `rho-murex`.
 
 ---
 
@@ -26,8 +50,9 @@ When the user says "hello" or starts a new session, the VERY FIRST thing to say 
 ### 1. SO Agent Dashboard
 - Next.js 15 App Router, React 19, TypeScript, Tailwind CSS
 - GitHub: https://github.com/alvygordo/agent-dashboard
-- Vercel: `so-agent-dashboard` (prod), `sandbox-agent-dashboard` (sandbox)
+- Vercel: `so-agent-dashboard` (prod), `sandbox-agent-dashboard` (sandbox) — see **Deployment rules** above
 - Branch strategy: `sandbox` → sandbox Vercel, `main` → production
+- **Do not use** Vercel project `agent-dashboard` (`agent-dashboard-rho-murex.vercel.app`) — duplicate; safe to remove after env audit
 - **Tabs:** Home, Workflows, Agents, GPTs & Gems, SF Reports, Tasks, NNR Tracker, Knowledge Base
 - **Key files:**
   - `lib/agents.ts` — all agent/tool config
