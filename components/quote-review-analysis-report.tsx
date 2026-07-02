@@ -411,10 +411,10 @@ export function QuoteReviewAnalysisReport({
               {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "none_detected" && (
                 <span className="text-green-800">No conflict detected in extracted text.</span>
               )}
-              {docAnalysis?.poAudit.tcConflict === "possible_conflict" && (
+              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "possible_conflict" && (
                 <span className="text-amber-800">Possible conflict — {docAnalysis.poAudit.tcConflictNote}</span>
               )}
-              {docAnalysis?.poAudit.tcConflict === "unknown" && (
+              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "unknown" && (
                 <span className="text-gray-700">{docAnalysis.poAudit.tcConflictNote}</span>
               )}
               {docAnalysis?.poAudit.tcConflict === "not_applicable" && (
