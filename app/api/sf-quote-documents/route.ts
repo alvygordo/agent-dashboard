@@ -50,6 +50,10 @@ async function analyzeUrl(
       productHint: extractOptions?.productHint,
       expectedTotal: extractOptions?.expectedTotal,
       mirrorSupplier: extractOptions?.mirrorSupplier,
+      termHint: extractOptions?.termHint,
+      quoteNumberHint: extractOptions?.quoteNumberHint,
+      renewalDateHint: extractOptions?.renewalDateHint,
+      expiryDateHint: extractOptions?.expiryDateHint,
     })
     return { doc, error: null }
   } catch (err: unknown) {
@@ -77,16 +81,32 @@ export async function POST(req: NextRequest) {
     const conn = await connectSalesforce()
     const poProvided = Boolean(body.purchaseOrderUrl?.trim())
     const productHint = body.salesforce.product
+    const termHint = body.salesforce.currentTerm
+    const arrHint = body.salesforce.currentArr != null
+      ? `$${body.salesforce.currentArr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      : null
 
-    const unsignedResult = await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', { productHint, docKind: 'quote' })
+    const unsignedResult = await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', {
+      productHint,
+      docKind: 'quote',
+      termHint,
+      renewalDateHint: body.salesforce.renewalDate,
+      expiryDateHint: body.salesforce.expiryDate,
+    })
     const signedResult = await analyzeUrl(conn, body.signedQuoteUrl, 'quote', {
       productHint,
       docKind: 'quote',
-      expectedTotal: unsignedResult.doc?.fields.totalAmount ?? null,
+      termHint,
+      expectedTotal: unsignedResult.doc?.fields.totalAmount ?? arrHint,
+      quoteNumberHint: unsignedResult.doc?.fields.quoteNumber ?? null,
+      renewalDateHint: body.salesforce.renewalDate,
+      expiryDateHint: body.salesforce.expiryDate,
     })
     const poResult = poProvided
       ? await analyzeUrl(conn, body.purchaseOrderUrl!, 'po', {
           docKind: 'po',
+          productHint,
+          expectedTotal: signedResult.doc?.fields.totalAmount ?? unsignedResult.doc?.fields.totalAmount ?? arrHint,
           mirrorSupplier: signedResult.doc?.fields.supplierName ?? null,
         })
       : { doc: null, error: null }

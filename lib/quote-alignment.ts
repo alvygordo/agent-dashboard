@@ -247,6 +247,12 @@ function buildAlignmentRows(
   })
 }
 
+function sfTermLabel(sf: SfAlignmentInput): string | null {
+  if (sf.currentTerm == null) return null
+  const months = String(sf.currentTerm).match(/(\d+)/)?.[1]
+  return months ? `${months} months` : null
+}
+
 function signedFieldsFromSf(sf: SfAlignmentInput) {
   return {
     customerName: sf.accountName,
@@ -450,7 +456,7 @@ export function buildDocumentAnalysis(
   quoteChecks.push(
     compareQuotePair('Quote number', u?.quoteNumber ?? null, s?.quoteNumber ?? null),
     compareQuotePair('Pricing / total', u?.totalAmount ?? null, s?.totalAmount ?? null),
-    compareQuotePair('Term length', u?.term ?? null, s?.term ?? null),
+    compareQuotePair('Term length', u?.term ?? sfTermLabel(sf), s?.term ?? sfTermLabel(sf)),
     compareQuotePair('Product', sf.product ?? u?.product ?? null, s?.product ?? null),
     compareQuotePair('Quantity / users', u?.quantity ?? null, s?.quantity ?? null),
   )
