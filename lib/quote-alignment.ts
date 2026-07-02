@@ -1,7 +1,7 @@
 import type { AnalysisFlag, AnalysisSeverity } from '@/lib/quote-review-analysis'
 import {
   formatFieldValue,
-  type ExtractedDocumentFields,
+  paymentTermsAlign,
   type ParsedDocument,
   valuesAlign,
 } from '@/lib/quote-field-extract'
@@ -15,7 +15,6 @@ export type AlignmentRow = {
   signedQuote: string
   purchaseOrder: string
   status: AlignmentStatus
-  note: string | null
 }
 
 export type QuoteComparisonCheck = {
@@ -44,6 +43,7 @@ export type DocumentAnalysisBundle = {
     overallSeverity: AnalysisSeverity
     tcConflict: 'none_detected' | 'possible_conflict' | 'unknown' | 'not_applicable'
     tcConflictNote: string
+    tcConflictDetails: string[]
   }
   alignment: {
     rows: AlignmentRow[]
@@ -81,9 +81,6 @@ export function buildSfBaselineAlignment(
       ? (row.purchaseOrder === '—' ? pendingLabel : row.purchaseOrder)
       : 'N/A',
     status: 'unknown' as AlignmentStatus,
-    note: row.salesforce !== '—'
-      ? 'Salesforce value loaded — signed quote / PO columns fill in after PDF analysis.'
-      : 'No Salesforce value for this field.',
   }))
 
   return {
@@ -103,67 +100,55 @@ function severityFromStatuses(statuses: AlignmentStatus[]): AnalysisSeverity {
   return 'pending'
 }
 
-function compareThree(
+type CompareMode = 'three-way' | 'sf-signed' | 'signed-po' | 'product-row'
+
+function compareAlignment(
+  mode: CompareMode,
   sf: string | null,
   signed: string | null,
   po: string | null,
   poProvided: boolean,
-  downloadState: { signedFailed: boolean; poFailed: boolean },
-): { status: AlignmentStatus; note: string | null } {
-  const hasSf = Boolean(sf?.trim())
-  const hasSigned = Boolean(signed?.trim())
-  const hasPo = Boolean(po?.trim())
+): AlignmentStatus {
+  const hasSf = Boolean(sf?.trim() && sf !== '—')
+  const hasSigned = Boolean(signed?.trim() && !signed.startsWith('Not extracted'))
+  const hasPo = Boolean(po?.trim() && po !== 'Not listed on PO' && !po.startsWith('Not extracted'))
 
-  if (!hasSigned && !hasPo && !hasSf) {
-    return { status: 'unknown', note: 'No values found in any source.' }
+  if (mode === 'signed-po') {
+    if (!hasSigned && !hasPo) return 'unknown'
+    if (!hasPo) return poProvided ? 'unknown' : 'na'
+    if (!hasSigned) return 'unknown'
+    return valuesAlign(signed, po) ? 'aligned' : 'mismatch'
   }
 
-  const signedAlignsSf = hasSf && hasSigned ? valuesAlign(sf, signed) : null
-  const poAlignsSigned = hasPo && hasSigned ? valuesAlign(po, signed) : null
-  const poAlignsSf = hasSf && hasPo ? valuesAlign(sf, po) : null
+  if (mode === 'product-row') {
+    if (hasSf && hasSigned && valuesAlign(sf, signed)) {
+      if (!poProvided || !hasPo) return 'aligned'
+      if (valuesAlign(sf, po) || valuesAlign(signed, po)) return 'aligned'
+      return 'mismatch'
+    }
+    if (hasSf && hasSigned) return 'mismatch'
+    return 'unknown'
+  }
 
+  if (mode === 'sf-signed') {
+    if (!hasSf && !hasSigned) return 'unknown'
+    if (!hasSigned) return 'unknown'
+    if (!hasSf) return 'partial'
+    return valuesAlign(sf, signed) ? 'aligned' : 'mismatch'
+  }
+
+  // three-way
+  if (!hasSigned && !hasPo && !hasSf) return 'unknown'
+  const sfSigned = hasSf && hasSigned ? valuesAlign(sf, signed) : null
+  const poSigned = hasPo && hasSigned ? valuesAlign(po, signed) : null
   if (!poProvided) {
-    if (signedAlignsSf === true) return { status: 'aligned', note: 'Signed quote matches Salesforce.' }
-    if (signedAlignsSf === false) return { status: 'mismatch', note: 'Signed quote differs from Salesforce.' }
-    if (hasSigned && !hasSf) return { status: 'partial', note: 'Found on signed quote only — verify in Salesforce.' }
-    if (hasSf && !hasSigned) {
-      return {
-        status: 'unknown',
-        note: downloadState.signedFailed
-          ? 'Signed quote PDF could not be downloaded — verify against Salesforce value manually.'
-          : 'Could not extract this field from signed quote PDF.',
-      }
-    }
-    return { status: 'unknown', note: 'Insufficient data to compare.' }
+    if (sfSigned === true) return 'aligned'
+    if (sfSigned === false) return 'mismatch'
+    return 'unknown'
   }
-
-  if (signedAlignsSf === true && (poAlignsSigned === true || !hasPo)) {
-    return { status: 'aligned', note: 'Salesforce, signed quote, and PO align.' }
-  }
-  if (signedAlignsSf === false || poAlignsSigned === false || poAlignsSf === false) {
-    const parts: string[] = []
-    if (signedAlignsSf === false) parts.push('Signed quote ≠ Salesforce')
-    if (poAlignsSigned === false) parts.push('PO ≠ signed quote')
-    if (poAlignsSf === false && hasPo) parts.push('PO ≠ Salesforce')
-    return { status: 'mismatch', note: parts.join('; ') || 'Values differ across sources.' }
-  }
-  if (!hasPo) {
-    return {
-      status: 'unknown',
-      note: downloadState.poFailed
-        ? 'PO PDF could not be downloaded — open the PO link manually.'
-        : 'PO link provided but this field was not found in extracted PO text.',
-    }
-  }
-  if (!hasSigned) {
-    return {
-      status: 'unknown',
-      note: downloadState.signedFailed
-        ? 'Signed quote PDF could not be downloaded.'
-        : 'Could not extract this field from signed quote PDF.',
-    }
-  }
-  return { status: 'partial', note: 'Some sources missing — verify manually.' }
+  if (sfSigned === true && (poSigned === true || !hasPo)) return 'aligned'
+  if (sfSigned === false || poSigned === false) return 'mismatch'
+  return 'unknown'
 }
 
 function buildAlignmentRows(
@@ -178,68 +163,129 @@ function buildAlignmentRows(
   const poFields = po?.fields ?? null
   const signedFailed = errors.some((e) => e.doc === 'signed')
   const poFailed = errors.some((e) => e.doc === 'po')
-  const downloadState = { signedFailed, poFailed }
+
+  const poProductDisplay = poFields?.product
+    ? formatFieldValue(poFields.product)
+    : poProvided
+      ? (poFailed ? 'Not extracted (download failed)' : 'Not listed on PO')
+      : 'N/A'
 
   const specs: {
     field: string
+    mode: CompareMode
     sf: string | null
     signed: string | null
     po: string | null
+    signedDisplay?: string
+    poDisplay?: string
+    sfDisplay?: string
   }[] = [
-    { field: 'Customer name', sf: sfFields.customerName, signed: sq?.customerName ?? null, po: poFields?.customerName ?? null },
-    { field: 'End user name', sf: sfFields.endUserName, signed: sq?.endUserName ?? null, po: poFields?.endUserName ?? null },
-    { field: 'Reseller name', sf: sfFields.resellerName, signed: sq?.resellerName ?? null, po: poFields?.resellerName ?? null },
-    { field: 'Address', sf: sfFields.address, signed: sq?.address ?? null, po: poFields?.address ?? null },
-    { field: 'Product', sf: sfFields.product, signed: sq?.product ?? null, po: poFields?.product ?? null },
-    { field: 'Support plan', sf: sfFields.supportPlan, signed: sq?.supportPlan ?? null, po: poFields?.supportPlan ?? null },
-    { field: 'Users / seats / qty', sf: sfFields.quantity, signed: sq?.quantity ?? null, po: poFields?.quantity ?? null },
-    { field: 'Renewal date', sf: sfFields.renewalDate, signed: sq?.renewalDate ?? null, po: poFields?.renewalDate ?? null },
-    { field: 'Expiry date', sf: sfFields.expiryDate, signed: sq?.expiryDate ?? null, po: poFields?.expiryDate ?? null },
-    { field: 'Service provider / supplier', sf: sfFields.supplierName, signed: sq?.supplierName ?? null, po: poFields?.supplierName ?? null },
-    { field: 'Payment terms', sf: sfFields.paymentTerms, signed: sq?.paymentTerms ?? null, po: poFields?.paymentTerms ?? null },
+    { field: 'Customer name', mode: 'three-way', sf: sfFields.customerName, signed: sq?.customerName ?? null, po: poFields?.customerName ?? null },
+    { field: 'End user name', mode: 'three-way', sf: sfFields.endUserName, signed: sq?.endUserName ?? null, po: poFields?.endUserName ?? null },
+    {
+      field: 'Product',
+      mode: 'product-row',
+      sf: sfFields.product,
+      signed: sq?.product ?? sfFields.product,
+      po: poFields?.product ?? null,
+      poDisplay: poProductDisplay,
+    },
+    { field: 'Support plan', mode: 'three-way', sf: sfFields.supportPlan, signed: sq?.supportPlan ?? null, po: poFields?.supportPlan ?? null },
+    { field: 'Users / seats / qty', mode: 'sf-signed', sf: sfFields.quantity, signed: sq?.quantity ?? null, po: poFields?.quantity ?? null },
+    { field: 'Renewal date', mode: 'sf-signed', sf: sfFields.renewalDate, signed: sq?.renewalDate ?? null, po: poFields?.renewalDate ?? null },
+    { field: 'Expiry date', mode: 'sf-signed', sf: sfFields.expiryDate, signed: sq?.expiryDate ?? null, po: poFields?.expiryDate ?? null },
+    {
+      field: 'Service provider / supplier',
+      mode: 'signed-po',
+      sf: '—',
+      signed: sq?.supplierName ?? null,
+      po: poFields?.supplierName ?? null,
+      sfDisplay: '—',
+    },
+    {
+      field: 'Payment terms',
+      mode: 'signed-po',
+      sf: '—',
+      signed: sq?.paymentTerms ?? null,
+      po: poFields?.paymentTerms ?? null,
+      sfDisplay: '—',
+    },
   ]
 
   return specs.map((spec) => {
-    const { status, note } = compareThree(spec.sf, spec.signed, spec.po, poProvided, downloadState)
-    const signedDisplay = spec.signed
-      ? formatFieldValue(spec.signed)
-      : signedFailed
-        ? 'Not extracted (download failed)'
-        : '—'
-    const poDisplay = !poProvided
+    const signedVal = spec.signed
+    const poVal = spec.po
+    let status: AlignmentStatus
+
+    if (spec.field === 'Payment terms') {
+      if (!sq?.paymentTerms && !poFields?.paymentTerms) status = 'unknown'
+      else if (!sq?.paymentTerms || !poFields?.paymentTerms) status = 'unknown'
+      else status = paymentTermsAlign(sq.paymentTerms, poFields.paymentTerms) ? 'aligned' : 'mismatch'
+    } else if (spec.field === 'Service provider / supplier') {
+      status = compareAlignment('signed-po', null, sq?.supplierName ?? null, poFields?.supplierName ?? null, poProvided)
+    } else {
+      status = compareAlignment(spec.mode, spec.sf, signedVal, poVal, poProvided)
+    }
+
+    const signedDisplay = spec.signedDisplay ?? (signedVal
+      ? formatFieldValue(signedVal)
+      : signedFailed ? 'Not extracted (download failed)' : '—')
+
+    const poDisplay = spec.poDisplay ?? (!poProvided
       ? 'N/A'
-      : spec.po
-        ? formatFieldValue(spec.po)
-        : poFailed
-          ? 'Not extracted (download failed)'
-          : '—'
+      : poVal
+        ? formatFieldValue(poVal)
+        : poFailed ? 'Not extracted (download failed)' : '—')
+
     return {
       field: spec.field,
-      salesforce: formatFieldValue(spec.sf),
+      salesforce: spec.sfDisplay ?? formatFieldValue(spec.sf),
       signedQuote: signedDisplay,
       purchaseOrder: poDisplay,
       status,
-      note,
     }
   })
 }
 
 function signedFieldsFromSf(sf: SfAlignmentInput) {
-  const paymentTerms = sf.paymentTerms
-    ?? (sf.currentTerm != null ? String(sf.currentTerm) : null)
-
   return {
     customerName: sf.accountName,
     endUserName: sf.accountName,
-    resellerName: null as string | null,
-    address: null as string | null,
     product: sf.product,
     supportPlan: sf.supportPlan,
     quantity: sf.userCount != null ? String(sf.userCount) : null,
     renewalDate: sf.renewalDate ? formatUsDate(sf.renewalDate) : null,
     expiryDate: sf.expiryDate ? formatUsDate(sf.expiryDate) : null,
-    supplierName: 'Trilogy',
-    paymentTerms,
+  }
+}
+
+function comparePaymentTermsPair(
+  leftVal: string | null,
+  rightVal: string | null,
+  leftLabel: string,
+  rightLabel: string,
+): QuoteComparisonCheck {
+  if (!leftVal && !rightVal) {
+    return { check: 'Payment terms', severity: 'pending', finding: 'Could not extract payment terms from either document — verify manually.' }
+  }
+  if (!leftVal || !rightVal) {
+    return {
+      check: 'Payment terms',
+      severity: 'pending',
+      finding: `Payment terms on ${leftVal ? leftLabel : rightLabel} only (${leftVal ?? rightVal}) — open both documents to confirm.`,
+    }
+  }
+  if (paymentTermsAlign(leftVal, rightVal)) {
+    return {
+      check: 'Payment terms',
+      severity: 'pass',
+      finding: `Match — ${leftVal} (${leftLabel}) = ${rightVal} (${rightLabel}).`,
+    }
+  }
+  return {
+    check: 'Payment terms',
+    severity: 'warn',
+    finding: `Mismatch — ${leftLabel}: ${leftVal}; ${rightLabel}: ${rightVal}. Flag for review.`,
   }
 }
 
@@ -291,39 +337,50 @@ function detectTcConflict(
   po: ParsedDocument | null,
   poProvided: boolean,
   errors: { doc: string; message: string }[],
-): { level: DocumentAnalysisBundle['poAudit']['tcConflict']; note: string } {
+): { level: DocumentAnalysisBundle['poAudit']['tcConflict']; note: string; details: string[] } {
   if (!poProvided) {
-    return { level: 'not_applicable', note: 'No PO document provided.' }
+    return { level: 'not_applicable', note: 'No PO document provided.', details: [] }
   }
   if (!po) {
     const poError = errors.find((e) => e.doc === 'po')?.message
     return {
       level: 'unknown',
       note: poError ?? 'PO could not be downloaded — open the PO PDF to check for conflicting purchaser terms.',
+      details: [],
     }
   }
   if (po.fields.notes.some((n) => n.includes('only a PO number'))) {
     return {
       level: 'unknown',
       note: 'PO text is too minimal to assess T&C conflict — request a full PO or confirm terms separately.',
+      details: [],
     }
   }
-  const buyerTerms = po.hasBuyerTermsLanguage
-  if (!po.hasTermsSection && !buyerTerms) {
+
+  const details = po.tcSnippets.map((s) => {
+    const ref = s.clauseRef ? `${s.clauseRef} · ` : ''
+    return `PO page ${s.page}: ${ref}"${s.excerpt}"`
+  })
+
+  if (details.length === 0 && !po.hasBuyerTermsLanguage && !po.hasTermsSection) {
     return {
       level: 'none_detected',
-      note: 'No purchaser-specific T&C language detected in PO extracted text. Standard quote T&Cs likely apply — spot-check the PO PDF.',
+      note: 'No purchaser-specific T&C language detected in PO extracted text.',
+      details: [],
     }
   }
-  if (buyerTerms || (po.hasTermsSection && signed?.hasTermsSection)) {
-    return {
-      level: 'possible_conflict',
-      note: 'PO may include purchaser T&Cs that could conflict with the signed quote or Trilogy standard terms — legal review recommended.',
-    }
+
+  if (details.length > 0 || po.hasBuyerTermsLanguage) {
+    const headline = details.length > 0
+      ? `Possible PO T&C conflict — review ${details.length} excerpt${details.length === 1 ? '' : 's'} below (compare to signed quote T&Cs).`
+      : 'PO may include purchaser T&Cs that could conflict with the signed quote — legal review recommended.'
+    return { level: 'possible_conflict', note: headline, details }
   }
+
   return {
     level: 'unknown',
     note: 'T&C sections present but automated conflict check is inconclusive — compare PO and signed quote T&Cs manually.',
+    details,
   }
 }
 
@@ -362,11 +419,18 @@ export function buildDocumentAnalysis(
   const signedPages = signed?.pageCount ?? null
 
   if (unsignedPages != null && signedPages != null) {
+    const pageRatio = signedPages / Math.max(unsignedPages, 1)
     if (unsignedPages === signedPages) {
       quoteChecks.push({
         check: 'Page count',
         severity: 'pass',
         finding: `Both PDFs are ${unsignedPages} page${unsignedPages === 1 ? '' : 's'}.`,
+      })
+    } else if (pageRatio >= 1.5) {
+      quoteChecks.push({
+        check: 'Page count',
+        severity: 'pending',
+        finding: `Signed quote has ${signedPages} pages vs ${unsignedPages} on unsigned — likely a combined document (e.g. quote + SOW). Compare the section that matches quote ${u?.quoteNumber ?? 'number'} on the unsigned PDF; attaching separate docs is optional if the relevant section aligns.`,
       })
     } else {
       quoteChecks.push({
@@ -387,9 +451,36 @@ export function buildDocumentAnalysis(
     compareQuotePair('Quote number', u?.quoteNumber ?? null, s?.quoteNumber ?? null),
     compareQuotePair('Pricing / total', u?.totalAmount ?? null, s?.totalAmount ?? null),
     compareQuotePair('Term length', u?.term ?? null, s?.term ?? null),
-    compareQuotePair('Product', u?.product ?? null, s?.product ?? null),
+    compareQuotePair('Product', sf.product ?? u?.product ?? null, s?.product ?? null),
     compareQuotePair('Quantity / users', u?.quantity ?? null, s?.quantity ?? null),
   )
+
+  const signatureCheck: QuoteComparisonCheck = (() => {
+    if (!signed) {
+      return { check: 'Signature', severity: 'pending', finding: 'Could not read signed quote — verify signature manually.' }
+    }
+    const { signerName, signedDate } = signed.fields
+    if (signerName && signedDate) {
+      return {
+        check: 'Signature',
+        severity: 'pass',
+        finding: `Signature detected — ${signerName}, dated ${signedDate}.`,
+      }
+    }
+    if (signerName || signedDate) {
+      return {
+        check: 'Signature',
+        severity: 'pending',
+        finding: `Partial signature info — ${[signerName, signedDate].filter(Boolean).join(', ')}. Confirm signatory and date on the PDF.`,
+      }
+    }
+    return {
+      check: 'Signature',
+      severity: 'warn',
+      finding: 'No signature block detected in extracted text — confirm the quote is signed, by whom, and when on the PDF.',
+    }
+  })()
+  quoteChecks.push(signatureCheck)
 
   const clauseCheck: QuoteComparisonCheck = (() => {
     if (!unsigned || !signed) {
@@ -407,6 +498,14 @@ export function buildDocumentAnalysis(
       }
     }
     const lenRatio = signed.textLength / Math.max(unsigned.textLength, 1)
+    const pageRatio = (signed.pageCount ?? 1) / Math.max(unsigned.pageCount ?? 1, 1)
+    if (pageRatio >= 1.5) {
+      return {
+        check: 'Clauses / alterations',
+        severity: 'pending',
+        finding: 'Signed document appears combined with additional content — review the unsigned-quote section only for clause changes.',
+      }
+    }
     if (lenRatio > 1.15 || lenRatio < 0.85) {
       return {
         check: 'Clauses / alterations',
@@ -470,7 +569,7 @@ export function buildDocumentAnalysis(
       const detailParts = [
         p?.poNumber ? `PO #${p.poNumber}` : null,
         p?.totalAmount ? `Total ${p.totalAmount}` : null,
-        p?.product ? `Product: ${p.product}` : null,
+        p?.product ? `Product: ${p.product}` : 'Product: not listed on PO',
         p?.quantity ? `Qty: ${p.quantity}` : null,
         p?.paymentTerms ? `Payment: ${p.paymentTerms}` : null,
         p?.term ? `Term: ${p.term}` : null,
@@ -483,8 +582,8 @@ export function buildDocumentAnalysis(
 
       poChecks.push(
         compareFieldPair('Price / total', s?.totalAmount ?? null, p?.totalAmount ?? null, 'signed quote', 'PO'),
-        compareFieldPair('Product scope', s?.product ?? null, p?.product ?? null, 'signed quote', 'PO'),
-        compareFieldPair('Term', s?.term ?? null, p?.term ?? null, 'signed quote', 'PO'),
+        compareFieldPair('Product scope', s?.product ?? sf.product ?? null, p?.product ?? null, 'signed quote', 'PO'),
+        comparePaymentTermsPair(s?.paymentTerms ?? null, p?.paymentTerms ?? null, 'signed quote', 'PO'),
         compareFieldPair('Quantity', s?.quantity ?? null, p?.quantity ?? null, 'signed quote', 'PO'),
       )
 
@@ -504,7 +603,9 @@ export function buildDocumentAnalysis(
     poChecks.push({
       check: 'T&C conflict check',
       severity: tc.level === 'possible_conflict' ? 'warn' : tc.level === 'none_detected' ? 'pass' : 'pending',
-      finding: tc.note,
+      finding: tc.details.length > 0
+        ? `${tc.note} ${tc.details.join(' | ')}`
+        : tc.note,
     })
     if (tc.level === 'possible_conflict' && poOverall === 'pass') poOverall = 'warn'
   }
@@ -543,6 +644,7 @@ export function buildDocumentAnalysis(
       overallSeverity: poProvided ? poOverall : 'pending',
       tcConflict: tc.level,
       tcConflictNote: tc.note,
+      tcConflictDetails: tc.details,
     },
     alignment: {
       rows: alignmentRows,

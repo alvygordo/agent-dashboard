@@ -195,8 +195,7 @@ function AlignmentTable({ rows }: { rows: AlignmentRow[] }) {
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Salesforce</th>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Signed quote</th>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Purchase order</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[10%]">Aligned?</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5">Note</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[22%]">Aligned?</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100 bg-white">
@@ -209,7 +208,6 @@ function AlignmentTable({ rows }: { rows: AlignmentRow[] }) {
               <td className="px-4 py-2.5 align-top">
                 <AlignmentBadge status={row.status} />
               </td>
-              <td className="px-4 py-2.5 text-gray-600 align-top text-xs">{row.note ?? "—"}</td>
             </tr>
           ))}
         </tbody>
@@ -412,7 +410,16 @@ export function QuoteReviewAnalysisReport({
                 <span className="text-green-800">No conflict detected in extracted text.</span>
               )}
               {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "possible_conflict" && (
-                <span className="text-amber-800">Possible conflict — {docAnalysis.poAudit.tcConflictNote}</span>
+                <span className="text-amber-800">
+                  {docAnalysis.poAudit.tcConflictNote}
+                  {docAnalysis.poAudit.tcConflictDetails.length > 0 && (
+                    <ul className="list-disc pl-5 mt-1 space-y-1 text-xs">
+                      {docAnalysis.poAudit.tcConflictDetails.map((d) => (
+                        <li key={d}>{d}</li>
+                      ))}
+                    </ul>
+                  )}
+                </span>
               )}
               {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "unknown" && (
                 <span className="text-gray-700">{docAnalysis.poAudit.tcConflictNote}</span>
