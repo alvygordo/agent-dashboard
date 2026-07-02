@@ -1,4 +1,5 @@
 import type { AnalysisFlag, AnalysisSeverity } from '@/lib/quote-review-analysis'
+import type { QuoteReviewMode } from '@/lib/quote-review-mode'
 import {
   datesAlign,
   formatFieldValue,
@@ -27,6 +28,13 @@ export type QuoteComparisonCheck = {
 }
 
 export type DocumentAnalysisBundle = {
+  analysisMode: QuoteReviewMode
+  documentIds: {
+    quoteNumber: string | null
+    poNumber: string | null
+    poReferencesQuote: boolean | null
+    poReferencesQuoteDetail: string
+  }
   unsigned: ParsedDocument | null
   signed: ParsedDocument | null
   purchaseOrder: ParsedDocument | null
@@ -462,42 +470,94 @@ function detectTcConflict(
     return { level: 'possible_conflict', note: headline, details }
   }
 
+  return { level: 'unknown', note: 'T&C sections present but automated conflict check is inconclusive — compare PO and signed quote T&Cs manually.', details }
+}
+
+function normalizeQuoteRef(value: string): string {
+  return value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
+}
+
+function poReferencesQuoteNumber(
+  po: ParsedDocument | null,
+  quoteNumber: string | null,
+): { found: boolean | null; detail: string } {
+  if (!po || !quoteNumber?.trim()) {
+    return {
+      found: null,
+      detail: quoteNumber
+        ? 'Could not verify PO quote reference — PO text not extracted.'
+        : 'Could not verify PO quote reference — quote number not extracted from unsigned quote.',
+    }
+  }
+  const needle = normalizeQuoteRef(quoteNumber)
+  const hay = normalizeQuoteRef(po.pageTexts.join('\n'))
+  if (!needle || hay.length < 10) {
+    return { found: null, detail: 'Could not verify PO quote reference — insufficient text.' }
+  }
+  if (hay.includes(needle)) {
+    return { found: true, detail: `PO text references quote ${quoteNumber}.` }
+  }
+  const alt = quoteNumber.replace(/^Q-/i, '')
+  if (alt !== quoteNumber && hay.includes(normalizeQuoteRef(alt))) {
+    return { found: true, detail: `PO text references quote number ${alt} (matches ${quoteNumber}).` }
+  }
   return {
-    level: 'unknown',
-    note: 'T&C sections present but automated conflict check is inconclusive — compare PO and signed quote T&Cs manually.',
-    details,
+    found: false,
+    detail: `PO does not appear to reference quote ${quoteNumber} — confirm the PO cites the correct quote before renewing on PO only.`,
   }
 }
 
-export function buildDocumentAnalysis(
+function signedSignatureCheck(signed: ParsedDocument | null): QuoteComparisonCheck {
+  if (!signed) {
+    return { check: 'Signature', severity: 'pending', finding: 'Could not read signed quote — verify signature manually.' }
+  }
+  const { signerName, signedDate } = signed.fields
+  const customerBlockNote = signed.fields.notes.some((n) => n.includes('For Customer'))
+  if (signerName && signedDate) {
+    return {
+      check: 'Signature',
+      severity: 'pass',
+      finding: `Customer signature detected — ${signerName}, dated ${signedDate}.`,
+    }
+  }
+  if (signerName?.includes('Customer signature block') || customerBlockNote) {
+    return {
+      check: 'Signature',
+      severity: 'pending',
+      finding: `Customer signature block found (For Customer)${signerName && !signerName.includes('block present') ? ` — ${signerName}` : ''}${signedDate ? `, dated ${signedDate}` : ''}. Confirm signatory name and date on the PDF.`,
+    }
+  }
+  if (signerName || signedDate) {
+    return {
+      check: 'Signature',
+      severity: 'pending',
+      finding: `Partial signature info — ${[signerName, signedDate].filter(Boolean).join(', ')}. Confirm signatory and date on the PDF.`,
+    }
+  }
+  return {
+    check: 'Signature',
+    severity: 'warn',
+    finding: 'No signature block detected in extracted text — look for the For Customer signature block (name and date).',
+  }
+}
+
+function buildUnsignedSignedChecks(
   sf: SfAlignmentInput,
   unsigned: ParsedDocument | null,
   signed: ParsedDocument | null,
-  po: ParsedDocument | null,
   errors: { doc: string; message: string }[],
-  poProvided: boolean,
-): DocumentAnalysisBundle {
+): QuoteComparisonCheck[] {
   const u = unsigned?.fields ?? null
   const s = signed?.fields ?? null
-  const p = po?.fields ?? null
-
   const quoteChecks: QuoteComparisonCheck[] = []
 
   const unsignedErr = errors.find((e) => e.doc === 'unsigned')
   const signedErr = errors.find((e) => e.doc === 'signed')
   if (unsignedErr) {
-    quoteChecks.push({
-      check: 'Unsigned quote PDF',
-      severity: 'fail',
-      finding: unsignedErr.message,
-    })
+    quoteChecks.push({ check: 'Unsigned quote PDF', severity: 'fail', finding: unsignedErr.message })
   }
   if (signedErr) {
-    quoteChecks.push({
-      check: 'Signed quote PDF',
-      severity: 'fail',
-      finding: signedErr.message,
-    })
+    quoteChecks.push({ check: 'Signed quote PDF', severity: 'fail', finding: signedErr.message })
   }
 
   const unsignedPages = unsigned?.pageCount ?? null
@@ -539,41 +599,7 @@ export function buildDocumentAnalysis(
     compareQuotePair('Product', sf.product ?? u?.product ?? null, s?.product ?? null),
     compareQuotePair('Quantity / users', u?.quantity ?? null, s?.quantity ?? null),
   )
-
-  const signatureCheck: QuoteComparisonCheck = (() => {
-    if (!signed) {
-      return { check: 'Signature', severity: 'pending', finding: 'Could not read signed quote — verify signature manually.' }
-    }
-    const { signerName, signedDate } = signed.fields
-    const customerBlockNote = signed.fields.notes.some((n) => n.includes('For Customer'))
-    if (signerName && signedDate) {
-      return {
-        check: 'Signature',
-        severity: 'pass',
-        finding: `Customer signature detected — ${signerName}, dated ${signedDate}.`,
-      }
-    }
-    if (signerName?.includes('Customer signature block') || customerBlockNote) {
-      return {
-        check: 'Signature',
-        severity: 'pending',
-        finding: `Customer signature block found (For Customer)${signerName && !signerName.includes('block present') ? ` — ${signerName}` : ''}${signedDate ? `, dated ${signedDate}` : ''}. Confirm signatory name and date on the PDF.`,
-      }
-    }
-    if (signerName || signedDate) {
-      return {
-        check: 'Signature',
-        severity: 'pending',
-        finding: `Partial signature info — ${[signerName, signedDate].filter(Boolean).join(', ')}. Confirm signatory and date on the PDF.`,
-      }
-    }
-    return {
-      check: 'Signature',
-      severity: 'warn',
-      finding: 'No signature block detected in extracted text — look for the For Customer signature block (name and date).',
-    }
-  })()
-  quoteChecks.push(signatureCheck)
+  quoteChecks.push(signedSignatureCheck(signed))
 
   const clauseCheck: QuoteComparisonCheck = (() => {
     if (!unsigned || !signed) {
@@ -614,18 +640,92 @@ export function buildDocumentAnalysis(
   })()
   quoteChecks.push(clauseCheck)
 
-  const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
-  const quotePending = quoteChecks.some((c) => c.severity === 'pending')
-  const quoteOverall: AnalysisSeverity = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
-  const quoteSummary = quoteMismatch
-    ? 'One or more fields differ between unsigned and signed quotes — review flagged items before accepting.'
-    : quotePending
-      ? 'Some comparisons could not be automated — complete manual PDF review.'
-      : 'Unsigned and signed quotes appear aligned on extracted fields and page count.'
+  return quoteChecks
+}
+
+export function buildDocumentAnalysis(
+  sf: SfAlignmentInput,
+  unsigned: ParsedDocument | null,
+  signed: ParsedDocument | null,
+  po: ParsedDocument | null,
+  errors: { doc: string; message: string }[],
+  poProvided: boolean,
+  mode: QuoteReviewMode = 'quote-signed-manual',
+): DocumentAnalysisBundle {
+  const u = unsigned?.fields ?? null
+  const s = signed?.fields ?? null
+  const p = po?.fields ?? null
+
+  const quoteBaselineFields = mode === 'po-received' ? u : s
+  const quoteBaselineLabel = mode === 'po-received' ? 'unsigned quote' : 'signed quote'
+  const alignmentQuoteDoc = mode === 'po-received' ? unsigned : signed
+  const tcQuoteDoc = mode === 'po-received' ? unsigned : signed
+
+  const unsignedPages = unsigned?.pageCount ?? null
+  const signedPages = signed?.pageCount ?? null
+
+  let quoteChecks: QuoteComparisonCheck[] = []
+  let quoteSummary: string
+  let quoteOverall: AnalysisSeverity
+
+  if (mode === 'quote-signed-adobe') {
+    const signedErr = errors.find((e) => e.doc === 'signed')
+    if (signedErr) {
+      quoteChecks.push({ check: 'Signed quote PDF', severity: 'fail', finding: signedErr.message })
+    }
+    if (s?.quoteNumber) {
+      quoteChecks.push({
+        check: 'Quote number',
+        severity: 'pass',
+        finding: `Quote ${s.quoteNumber} extracted from Adobe-signed document.`,
+      })
+    }
+    quoteChecks.push(signedSignatureCheck(signed))
+    const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
+    const quotePending = quoteChecks.some((c) => c.severity === 'pending')
+    quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
+    quoteSummary =
+      'Primary quote is Adobe-signed — unsigned comparison skipped. Review signed quote vs PO below.'
+  } else if (mode === 'po-received') {
+    const unsignedErr = errors.find((e) => e.doc === 'unsigned')
+    if (unsignedErr) {
+      quoteChecks.push({ check: 'Unsigned quote PDF', severity: 'fail', finding: unsignedErr.message })
+    } else if (unsigned) {
+      quoteChecks.push({
+        check: 'Unsigned quote PDF',
+        severity: 'pass',
+        finding: `Unsigned quote loaded${u?.quoteNumber ? ` — Quote ${u.quoteNumber}` : ''}${unsignedPages != null ? ` (${unsignedPages} page${unsignedPages === 1 ? '' : 's'})` : ''}.`,
+      })
+    }
+    const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
+    const quotePending = quoteChecks.some((c) => c.severity === 'pending')
+    quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
+    quoteSummary =
+      'PO Received — customer did not sign the quote. Compare unsigned quote to PO in the Purchase order section.'
+  } else {
+    quoteChecks = buildUnsignedSignedChecks(sf, unsigned, signed, errors)
+    const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
+    const quotePending = quoteChecks.some((c) => c.severity === 'pending')
+    quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
+    quoteSummary = quoteMismatch
+      ? 'One or more fields differ between unsigned and signed quotes — review flagged items before accepting.'
+      : quotePending
+        ? 'Some comparisons could not be automated — complete manual PDF review.'
+        : 'Unsigned and signed quotes appear aligned on extracted fields and page count.'
+  }
 
   const poChecks: QuoteComparisonCheck[] = []
   let poSummary = 'No purchase order provided.'
   let poOverall: AnalysisSeverity = 'pending'
+
+  const quoteNumber =
+    mode === 'po-received'
+      ? (u?.quoteNumber ?? null)
+      : (s?.quoteNumber ?? u?.quoteNumber ?? null)
+  const poNumber = p?.poNumber ?? null
+  const quoteRef = mode === 'po-received'
+    ? poReferencesQuoteNumber(po, u?.quoteNumber ?? null)
+    : { found: null as boolean | null, detail: '' }
 
   if (poProvided) {
     if (!po) {
@@ -644,12 +744,12 @@ export function buildDocumentAnalysis(
         finding: `Attached PO appears to show only PO number${p?.poNumber ? ` (${p.poNumber})` : ''} — no pricing, product scope, or terms visible. Request a full PO or confirm details separately.`,
       })
       poChecks.push({
-        check: 'Price vs signed quote',
+        check: `Price vs ${quoteBaselineLabel}`,
         severity: 'pending',
         finding: 'Cannot compare pricing — PO has no extractable amount.',
       })
       poChecks.push({
-        check: 'Product scope vs signed quote',
+        check: `Product scope vs ${quoteBaselineLabel}`,
         severity: 'pending',
         finding: 'Cannot compare product scope — PO has no extractable line items.',
       })
@@ -674,51 +774,60 @@ export function buildDocumentAnalysis(
       })
 
       poChecks.push(
-        compareFieldPair('Price / total', s?.totalAmount ?? null, p?.totalAmount ?? null, 'signed quote', 'PO'),
-        compareFieldPair('Product scope', s?.product ?? sf.product ?? null, p?.product ?? null, 'signed quote', 'PO'),
-        comparePaymentTermsPair(s?.paymentTerms ?? null, p?.paymentTerms ?? null, 'signed quote', 'PO'),
-        compareTermPair('Term duration', s?.term ?? null, p?.term ?? null, 'signed quote', 'PO'),
-        compareFieldPair('Quantity', s?.quantity ?? null, p?.quantity ?? null, 'signed quote', 'PO'),
+        compareFieldPair('Price / total', quoteBaselineFields?.totalAmount ?? null, p?.totalAmount ?? null, quoteBaselineLabel, 'PO'),
+        compareFieldPair('Product scope', quoteBaselineFields?.product ?? sf.product ?? null, p?.product ?? null, quoteBaselineLabel, 'PO'),
+        comparePaymentTermsPair(quoteBaselineFields?.paymentTerms ?? null, p?.paymentTerms ?? null, quoteBaselineLabel, 'PO'),
+        compareTermPair('Term duration', quoteBaselineFields?.term ?? null, p?.term ?? null, quoteBaselineLabel, 'PO'),
+        compareFieldPair('Quantity', quoteBaselineFields?.quantity ?? null, p?.quantity ?? null, quoteBaselineLabel, 'PO'),
       )
+
+      if (mode === 'po-received') {
+        poChecks.push({
+          check: 'PO references quote #',
+          severity: quoteRef.found === true ? 'pass' : quoteRef.found === false ? 'warn' : 'pending',
+          finding: quoteRef.detail,
+        })
+      }
 
       const poMismatch = poChecks.some((c) => c.severity === 'warn')
       const poPending = poChecks.some((c) => c.severity === 'pending')
       poOverall = poMismatch ? 'warn' : poPending ? 'pending' : 'pass'
       poSummary = poMismatch
-        ? 'PO details differ from signed quote on one or more fields — review before provisioning.'
+        ? `PO details differ from ${quoteBaselineLabel} on one or more fields — review before provisioning.`
         : poPending
           ? 'PO partially extracted — confirm price, scope, and terms on the PDF.'
-          : 'PO appears aligned with signed quote on extracted fields.'
+          : `PO appears aligned with ${quoteBaselineLabel} on extracted fields.`
     }
   }
 
-  const tc = detectTcConflict(signed, po, poProvided, errors)
+  const tc = detectTcConflict(tcQuoteDoc, po, poProvided, errors)
   if (poProvided && po) {
     poChecks.push({
       check: 'T&C conflict check',
       severity: tc.level === 'possible_conflict' ? 'warn' : tc.level === 'none_detected' ? 'pass' : 'pending',
-      finding: tc.details.length > 0
-        ? `${tc.note} ${tc.details.join(' | ')}`
-        : tc.note,
+      finding: tc.details.length > 0 ? `${tc.note} ${tc.details.join(' | ')}` : tc.note,
     })
     if (tc.level === 'possible_conflict' && poOverall === 'pass') poOverall = 'warn'
   }
 
-  const alignmentRows = buildAlignmentRows(sf, signed, po, poProvided, errors)
+  const alignmentRows = buildAlignmentRows(sf, alignmentQuoteDoc, po, poProvided, errors)
   const dataStatuses = alignmentRows.map((r) => r.status)
   const alignmentOverall = severityFromStatuses(dataStatuses)
   const alignedCount = alignmentRows.filter((r) => r.status === 'aligned').length
   const mismatchCount = alignmentRows.filter((r) => r.status === 'mismatch').length
   const pdfFailed = errors.length > 0
   const qtyNotes = [
-    ...(signed?.fields.notes ?? []),
+    ...(alignmentQuoteDoc?.fields.notes ?? []),
     ...(po?.fields.notes ?? []),
   ].filter((n) => /line item|footer mentions/i.test(n))
+
+  const alignmentSourceLabel =
+    mode === 'po-received' ? 'unsigned quote and PO' : 'signed quote and PO'
 
   let alignmentSummary = pdfFailed
     ? 'PDF extraction failed for one or more documents — Salesforce values shown; open PDFs manually to complete alignment.'
     : mismatchCount > 0
-      ? `${mismatchCount} field${mismatchCount === 1 ? '' : 's'} mismatch across Salesforce, signed quote, and PO — review the alignment table.`
+      ? `${mismatchCount} field${mismatchCount === 1 ? '' : 's'} mismatch across Salesforce, ${alignmentSourceLabel} — review the alignment table.`
       : alignedCount >= 5
         ? `Core fields align across sources (${alignedCount} matched).`
         : 'Limited extraction — use the alignment table and open PDFs to confirm all fields.'
@@ -728,6 +837,13 @@ export function buildDocumentAnalysis(
   }
 
   return {
+    analysisMode: mode,
+    documentIds: {
+      quoteNumber,
+      poNumber,
+      poReferencesQuote: quoteRef.found,
+      poReferencesQuoteDetail: quoteRef.detail,
+    },
     unsigned,
     signed,
     purchaseOrder: po,
@@ -762,29 +878,53 @@ export function documentFlagsFromAnalysis(
   bundle: DocumentAnalysisBundle,
 ): AnalysisFlag[] {
   const flags: AnalysisFlag[] = []
+  const mode = bundle.analysisMode
 
-  flags.push({
-    id: 'pdf-diff',
-    label: 'Signed vs unsigned comparison',
-    detail: bundle.quoteComparison.summary,
-    severity: bundle.quoteComparison.overallSeverity,
-    category: 'manual',
-  })
-
-  for (const check of bundle.quoteComparison.checks) {
+  if (mode === 'quote-signed-manual') {
     flags.push({
-      id: `pdf-${check.check.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
-      label: check.check,
-      detail: check.finding,
-      severity: check.severity,
+      id: 'pdf-diff',
+      label: 'Signed vs unsigned comparison',
+      detail: bundle.quoteComparison.summary,
+      severity: bundle.quoteComparison.overallSeverity,
       category: 'manual',
     })
+    for (const check of bundle.quoteComparison.checks) {
+      flags.push({
+        id: `pdf-${check.check.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        label: check.check,
+        detail: check.finding,
+        severity: check.severity,
+        category: 'manual',
+      })
+    }
+  } else if (mode === 'quote-signed-adobe') {
+    for (const check of bundle.quoteComparison.checks) {
+      flags.push({
+        id: `pdf-${check.check.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        label: check.check,
+        detail: check.finding,
+        severity: check.severity,
+        category: 'manual',
+      })
+    }
+  } else if (mode === 'po-received') {
+    for (const check of bundle.quoteComparison.checks) {
+      flags.push({
+        id: `pdf-${check.check.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        label: check.check,
+        detail: check.finding,
+        severity: check.severity,
+        category: 'manual',
+      })
+    }
   }
 
   if (bundle.poAudit.present) {
+    const poAuditLabel =
+      mode === 'po-received' ? 'PO vs unsigned quote audit' : 'PO vs signed quote audit'
     flags.push({
       id: 'po-audit',
-      label: 'PO vs signed quote audit',
+      label: poAuditLabel,
       detail: bundle.poAudit.summary,
       severity: bundle.poAudit.overallSeverity,
       category: 'manual',

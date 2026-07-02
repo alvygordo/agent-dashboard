@@ -17,6 +17,8 @@ import {
 } from "@/lib/sf-field-format"
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
+import type { QuoteReviewMode } from "@/lib/quote-review-mode"
+import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
 import {
   ArrowRight,
@@ -41,6 +43,8 @@ type OppData = {
   winTypeValid: boolean
   signedQuoteUrl: string | null
   purchaseOrderLink: string | null
+  purchaseOrderRequirement: string | null
+  comparePo: boolean
   netSuiteSubLink: string | null
   product: string | null
   currentTerm: string | number | null
@@ -52,6 +56,15 @@ type OppData = {
   userCount: number | null
   primaryContact: { name: string; email: string | null; display?: string; isPrimary?: boolean } | null
   oppUrl: string
+  primaryQuoteId: string | null
+  primaryQuoteStatus: string | null
+  primaryQuoteNumber: string | null
+  primaryQuoteUrl: string | null
+  unsignedQuoteAttachmentUrl: string | null
+  unsignedQuoteAttachmentTitle: string | null
+  reviewMode: QuoteReviewMode
+  reviewModeTitle: string
+  reviewModeDescription: string
 }
 
 type DocLinks = {
@@ -185,11 +198,21 @@ function SignedQuoteReviewerInner() {
   function selectOpp(opp: OppData) {
     setOppData(opp)
     setOppMatches([])
-    setDocs((prev) => ({
-      unsignedQuoteUrl: prev.unsignedQuoteUrl,
-      signedQuoteUrl: opp.signedQuoteUrl ?? prev.signedQuoteUrl,
-      purchaseOrderUrl: opp.purchaseOrderLink ?? prev.purchaseOrderUrl,
-    }))
+    const plan = resolveQuoteReviewMode({
+      winType: opp.winType,
+      primaryQuoteStatus: opp.primaryQuoteStatus,
+      signedQuoteUrl: opp.signedQuoteUrl,
+      purchaseOrderLink: opp.purchaseOrderLink,
+      purchaseOrderRequirement: opp.purchaseOrderRequirement,
+    })
+    setDocs({
+      unsignedQuoteUrl:
+        plan.requiresUnsigned
+          ? (opp.unsignedQuoteAttachmentUrl ?? "")
+          : "",
+      signedQuoteUrl: plan.requiresSigned ? (opp.signedQuoteUrl ?? "") : "",
+      purchaseOrderUrl: plan.comparePo ? (opp.purchaseOrderLink ?? "") : "",
+    })
     setStep("documents")
   }
 
@@ -201,8 +224,28 @@ function SignedQuoteReviewerInner() {
   }, [])
 
   function handleDocumentsContinue() {
-    if (!docs.unsignedQuoteUrl.trim() || !docs.signedQuoteUrl.trim()) {
-      setDocError("Unsigned and signed quote links are required")
+    if (!oppData) return
+    const plan = resolveQuoteReviewMode({
+      winType: oppData.winType,
+      primaryQuoteStatus: oppData.primaryQuoteStatus,
+      signedQuoteUrl: docs.signedQuoteUrl,
+      purchaseOrderLink: docs.purchaseOrderUrl,
+      purchaseOrderRequirement: oppData.purchaseOrderRequirement,
+    })
+    if (plan.mode === "unsupported") {
+      setDocError("Win Type must be Quote Signed or PO Received")
+      return
+    }
+    if (plan.requiresUnsigned && !docs.unsignedQuoteUrl.trim()) {
+      setDocError("Unsigned quote link is required — open the primary quote Notes & Attachments if not auto-filled")
+      return
+    }
+    if (plan.requiresSigned && !docs.signedQuoteUrl.trim()) {
+      setDocError("Signed quote link is required from the Signed Quote field")
+      return
+    }
+    if (plan.requiresPo && !docs.purchaseOrderUrl.trim()) {
+      setDocError("Purchase order link is required when Purchase Order is Required - Attached")
       return
     }
     setDocError("")
@@ -215,10 +258,14 @@ function SignedQuoteReviewerInner() {
   useEffect(() => {
     if (step !== "analysis" || !oppData) return
 
+    const reviewMode = oppData.reviewMode
+    const comparePo = oppData.comparePo
     const fetchKey = [
+      reviewMode,
+      comparePo ? "po" : "no-po",
       docs.unsignedQuoteUrl.trim(),
       docs.signedQuoteUrl.trim(),
-      docs.purchaseOrderUrl.trim(),
+      comparePo ? docs.purchaseOrderUrl.trim() : "",
     ].join("|")
 
     if (docAnalysis && docFetchKeyRef.current === fetchKey) return
@@ -236,9 +283,11 @@ function SignedQuoteReviewerInner() {
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
+        analysisMode: reviewMode,
+        comparePo,
         unsignedQuoteUrl: docs.unsignedQuoteUrl,
         signedQuoteUrl: docs.signedQuoteUrl,
-        purchaseOrderUrl: docs.purchaseOrderUrl,
+        purchaseOrderUrl: comparePo ? docs.purchaseOrderUrl : "",
         salesforce: {
           accountName: oppData.accountName,
           product: oppData.product,
@@ -285,7 +334,20 @@ function SignedQuoteReviewerInner() {
     docs.signedQuoteUrl,
     docs.purchaseOrderUrl,
     docAnalysis,
+    oppData?.reviewMode,
+    oppData?.comparePo,
   ])
+
+  const reviewPlan = oppData
+    ? resolveQuoteReviewMode({
+        winType: oppData.winType,
+        primaryQuoteStatus: oppData.primaryQuoteStatus,
+        signedQuoteUrl: docs.signedQuoteUrl,
+        purchaseOrderLink: docs.purchaseOrderUrl,
+        purchaseOrderRequirement: oppData.purchaseOrderRequirement,
+      })
+    : null
+  const comparePo = reviewPlan?.comparePo ?? false
 
   async function copyTemplate() {
     if (!oppData) return
@@ -309,6 +371,7 @@ function SignedQuoteReviewerInner() {
     ? buildQuoteReviewAnalysis({
         winType: oppData.winType,
         winTypeValid: oppData.winTypeValid,
+        primaryQuoteStatus: oppData.primaryQuoteStatus,
         supportPlan: oppData.supportPlan,
         userCount: oppData.userCount,
         renewalDate: oppData.renewalDate,
@@ -317,6 +380,9 @@ function SignedQuoteReviewerInner() {
         unsignedQuoteUrl: docs.unsignedQuoteUrl,
         signedQuoteUrl: docs.signedQuoteUrl,
         purchaseOrderUrl: docs.purchaseOrderUrl,
+        purchaseOrderRequirement: oppData.purchaseOrderRequirement,
+        reviewMode: oppData.reviewMode,
+        comparePo: oppData.comparePo,
       }, docAnalysis)
     : null
   const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
@@ -449,20 +515,37 @@ function SignedQuoteReviewerInner() {
           </div>
         )}
 
-        {step === "documents" && oppData && (
+        {step === "documents" && oppData && reviewPlan && (
           <div className="flex flex-col items-center justify-center min-h-full px-6 py-12">
             <div className="w-full max-w-lg bg-white border border-gray-200 rounded-xl shadow-sm p-8 space-y-5">
               <div>
                 <Badge className={`${theme.stepBadge} mb-3`}>Step 2 of {STEP_COUNT}</Badge>
                 <h2 className="text-xl font-bold text-gray-900">Document Links</h2>
                 <p className="text-sm text-gray-500 mt-1">
-                  Paste links to the unsigned quote, signed quote, and PO (if applicable).
+                  Win Type drives which documents are analyzed. Links are pre-filled from Salesforce when available.
                 </p>
               </div>
 
-              <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm space-y-1">
+              <div className="rounded-lg bg-gray-50 border border-gray-200 px-4 py-3 text-sm space-y-2">
                 <p className="font-medium text-gray-900">{oppData.name}</p>
                 <p className="text-gray-500">{oppData.accountName}</p>
+                <p className="text-gray-700">
+                  <span className="font-medium">Win Type:</span> {oppData.winType ?? "—"}
+                </p>
+                {oppData.primaryQuoteStatus && (
+                  <p className="text-gray-700">
+                    <span className="font-medium">Primary quote status:</span> {oppData.primaryQuoteStatus}
+                  </p>
+                )}
+                {oppData.purchaseOrderRequirement && (
+                  <p className="text-gray-700">
+                    <span className="font-medium">Purchase Order:</span> {oppData.purchaseOrderRequirement}
+                  </p>
+                )}
+                <div className="rounded-md border border-purple-200 bg-purple-50 px-3 py-2 text-purple-950">
+                  <p className="font-medium">{reviewPlan.title}</p>
+                  <p className="text-xs mt-1">{reviewPlan.description}</p>
+                </div>
                 <a
                   href={oppData.oppUrl}
                   target="_blank"
@@ -471,39 +554,70 @@ function SignedQuoteReviewerInner() {
                 >
                   Open in Salesforce <ExternalLink className="w-3 h-3" />
                 </a>
+                {oppData.primaryQuoteUrl && (
+                  <a
+                    href={oppData.primaryQuoteUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={`inline-flex items-center gap-1 text-xs ${theme.accent} hover:underline ml-3`}
+                  >
+                    Open primary quote <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
               </div>
 
               <div className="space-y-4">
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">Unsigned quote link *</label>
-                  <input
-                    type="url"
-                    value={docs.unsignedQuoteUrl}
-                    onChange={(e) => setDocs((d) => ({ ...d, unsignedQuoteUrl: e.target.value }))}
-                    placeholder="https://..."
-                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">Signed quote link *</label>
-                  <input
-                    type="url"
-                    value={docs.signedQuoteUrl}
-                    onChange={(e) => setDocs((d) => ({ ...d, signedQuoteUrl: e.target.value }))}
-                    placeholder="https://..."
-                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-sm font-medium text-gray-700">Purchase order link (optional)</label>
-                  <input
-                    type="url"
-                    value={docs.purchaseOrderUrl}
-                    onChange={(e) => setDocs((d) => ({ ...d, purchaseOrderUrl: e.target.value }))}
-                    placeholder="Skip if not required"
-                    className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
-                  />
-                </div>
+                {reviewPlan.requiresUnsigned && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-700">Unsigned quote link *</label>
+                    <input
+                      type="url"
+                      value={docs.unsignedQuoteUrl}
+                      onChange={(e) => setDocs((d) => ({ ...d, unsignedQuoteUrl: e.target.value }))}
+                      placeholder="From primary quote → Notes & Attachments"
+                      className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
+                    />
+                    {oppData.unsignedQuoteAttachmentTitle && (
+                      <p className="text-xs text-gray-500">
+                        Auto-detected: {oppData.unsignedQuoteAttachmentTitle}
+                      </p>
+                    )}
+                  </div>
+                )}
+                {reviewPlan.requiresSigned && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-700">Signed quote link *</label>
+                    <input
+                      type="url"
+                      value={docs.signedQuoteUrl}
+                      onChange={(e) => setDocs((d) => ({ ...d, signedQuoteUrl: e.target.value }))}
+                      placeholder="From Signed Quote field on opportunity"
+                      className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
+                    />
+                  </div>
+                )}
+                {reviewPlan.comparePo && (
+                  <div className="space-y-1">
+                    <label className="text-sm font-medium text-gray-700">Purchase order link *</label>
+                    <input
+                      type="url"
+                      value={docs.purchaseOrderUrl}
+                      onChange={(e) => setDocs((d) => ({ ...d, purchaseOrderUrl: e.target.value }))}
+                      placeholder="From Purchase Order Link field — Required - Attached"
+                      className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
+                    />
+                  </div>
+                )}
+                {!reviewPlan.comparePo && reviewPlan.poRequirement === "required-pending" && (
+                  <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                    PO is <strong>Required - Pending</strong> — no PO comparison until the customer attaches one. Review the signed quote only.
+                  </div>
+                )}
+                {!reviewPlan.comparePo && reviewPlan.poRequirement === "not-required" && (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                    PO is <strong>Not Required</strong> — signed quote review only, no PO comparison.
+                  </div>
+                )}
               </div>
 
               {docError && (
@@ -531,7 +645,13 @@ function SignedQuoteReviewerInner() {
               <QuoteReviewAnalysisReport
                 analysis={analysis}
                 docs={docs}
-                poProvided={Boolean(docs.purchaseOrderUrl.trim())}
+                poProvided={comparePo && Boolean(docs.purchaseOrderUrl.trim())}
+                comparePo={comparePo}
+                purchaseOrderRequirement={oppData.purchaseOrderRequirement}
+                reviewMode={oppData.reviewMode}
+                reviewModeDescription={oppData.reviewModeDescription}
+                primaryQuoteStatus={oppData.primaryQuoteStatus}
+                primaryQuoteNumber={oppData.primaryQuoteNumber}
                 sfAlignment={{
                   accountName: oppData.accountName,
                   product: oppData.product,
@@ -578,7 +698,7 @@ function SignedQuoteReviewerInner() {
               <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of {STEP_COUNT}</Badge>
               <h2 className="text-2xl font-bold text-gray-900">Provisioning Template</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Copy the template below, then open the support queue to raise your provisioning ticket.
+                Copy the template below for provisioning. For PO-only renewals, values come from the unsigned quote / Salesforce opportunity.
               </p>
             </div>
 

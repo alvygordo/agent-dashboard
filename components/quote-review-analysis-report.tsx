@@ -8,6 +8,8 @@ import {
   type AlignmentStatus,
   type SfAlignmentInput,
 } from "@/lib/quote-alignment"
+import type { QuoteReviewMode } from "@/lib/quote-review-mode"
+import { modeLabel } from "@/lib/quote-review-mode"
 import {
   analysisSummaryLabel,
   severityLabel,
@@ -185,7 +187,13 @@ function DocCompareColumn({
   )
 }
 
-function AlignmentTable({ rows }: { rows: AlignmentRow[] }) {
+function AlignmentTable({
+  rows,
+  quoteColumnLabel,
+}: {
+  rows: AlignmentRow[]
+  quoteColumnLabel: string
+}) {
   return (
     <div className="overflow-x-auto rounded-lg border border-gray-200">
       <table className="w-full text-sm min-w-[720px]">
@@ -193,7 +201,7 @@ function AlignmentTable({ rows }: { rows: AlignmentRow[] }) {
           <tr>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[18%]">Field</th>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Salesforce</th>
-            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Signed quote</th>
+            <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">{quoteColumnLabel}</th>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[20%]">Purchase order</th>
             <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[22%]">Aligned?</th>
           </tr>
@@ -257,6 +265,12 @@ export function QuoteReviewAnalysisReport({
   docAnalysis,
   docAnalysisLoading,
   docAnalysisError,
+  reviewMode,
+  reviewModeDescription,
+  primaryQuoteStatus,
+  primaryQuoteNumber,
+  comparePo = true,
+  purchaseOrderRequirement,
 }: {
   analysis: QuoteReviewAnalysis
   opp: OppSummary
@@ -266,7 +280,22 @@ export function QuoteReviewAnalysisReport({
   docAnalysis?: DocumentAnalysisBundle | null
   docAnalysisLoading?: boolean
   docAnalysisError?: string | null
+  reviewMode: QuoteReviewMode
+  reviewModeDescription?: string | null
+  primaryQuoteStatus?: string | null
+  primaryQuoteNumber?: string | null
+  comparePo?: boolean
+  purchaseOrderRequirement?: string | null
 }) {
+  const mode = docAnalysis?.analysisMode ?? reviewMode
+  const showUnsignedSignedComparison = mode === 'quote-signed-manual'
+  const showSignedOnly = mode === 'quote-signed-adobe'
+  const showPoReceived = mode === 'po-received'
+  const showPoSection = comparePo && (poProvided || showPoReceived)
+  const quoteColumnLabel = showPoReceived ? 'Unsigned quote' : 'Signed quote'
+  const extractedQuoteNumber =
+    docAnalysis?.documentIds.quoteNumber ?? primaryQuoteNumber ?? null
+  const extractedPoNumber = docAnalysis?.documentIds.poNumber ?? null
   const byCategory = (cat: AnalysisFlag["category"]) =>
     analysis.flags.filter((f) => f.category === cat)
 
@@ -296,6 +325,32 @@ export function QuoteReviewAnalysisReport({
         <p className="text-xs font-semibold uppercase tracking-widest text-gray-400">Signed Quote Review Report</p>
         <h2 className="text-xl font-bold text-gray-900 mt-1">{opp.name}</h2>
         <p className="text-sm text-gray-500 mt-1">{opp.accountName ?? "—"} · {opp.product ?? "—"}</p>
+        <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 px-4 py-3 text-sm space-y-1">
+          <p className="font-medium text-purple-950">{modeLabel(mode, comparePo)}</p>
+          {reviewModeDescription && (
+            <p className="text-purple-900">{reviewModeDescription}</p>
+          )}
+          {purchaseOrderRequirement && (
+            <p className="text-purple-800 text-xs">
+              Purchase Order field: <strong>{purchaseOrderRequirement}</strong>
+            </p>
+          )}
+          {primaryQuoteStatus && (
+            <p className="text-purple-800 text-xs">
+              Primary quote status: <strong>{primaryQuoteStatus}</strong>
+            </p>
+          )}
+        </div>
+        {(extractedQuoteNumber || extractedPoNumber) && (
+          <div className="mt-3 flex flex-wrap gap-4 text-sm">
+            {extractedQuoteNumber && (
+              <p><span className="font-medium text-gray-700">Quote #:</span> {extractedQuoteNumber}</p>
+            )}
+            {extractedPoNumber && (
+              <p><span className="font-medium text-gray-700">PO #:</span> {extractedPoNumber}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className={`border-l-4 rounded-r-lg px-5 py-4 ${verdictClass}`}>
@@ -336,15 +391,74 @@ export function QuoteReviewAnalysisReport({
         </div>
       )}
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quote comparison</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            {docAnalysis?.quoteComparison.summary
-              ?? "Comparing unsigned baseline to customer-signed quote."}
-          </p>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      {showUnsignedSignedComparison && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Quote comparison</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {docAnalysis?.quoteComparison.summary
+                ?? "Comparing unsigned baseline to customer-signed quote."}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <DocCompareColumn
+              title="Baseline"
+              subtitle="Unsigned quote"
+              linkLabel="Open unsigned quote"
+              href={docs.unsignedQuoteUrl}
+              status={unsignedStatus}
+              pageCount={docAnalysis?.quoteComparison.unsignedPages ?? null}
+              titleFromPdf={docAnalysis?.unsigned?.title ?? null}
+            />
+            <DocCompareColumn
+              title="Customer signed"
+              subtitle="Signed quote"
+              linkLabel="Open signed quote"
+              href={docs.signedQuoteUrl}
+              status={signedStatus}
+              pageCount={docAnalysis?.quoteComparison.signedPages ?? null}
+              titleFromPdf={docAnalysis?.signed?.title ?? null}
+            />
+          </div>
+          {quoteChecks.length > 0 ? (
+            <ComparisonCheckTable checks={quoteChecks} />
+          ) : (
+            <FlagTable flags={byCategory("manual").filter((f) => f.id.startsWith("pdf"))} />
+          )}
+        </section>
+      )}
+
+      {showSignedOnly && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Signed quote</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {docAnalysis?.quoteComparison.summary
+                ?? "Adobe-signed primary quote — analyze signed document and compare to PO."}
+            </p>
+          </div>
+          <DocCompareColumn
+            title="Customer signed"
+            subtitle="Signed quote (Adobe)"
+            linkLabel="Open signed quote"
+            href={docs.signedQuoteUrl}
+            status={signedStatus}
+            pageCount={docAnalysis?.quoteComparison.signedPages ?? null}
+            titleFromPdf={docAnalysis?.signed?.title ?? null}
+          />
+          {quoteChecks.length > 0 && <ComparisonCheckTable checks={quoteChecks} />}
+        </section>
+      )}
+
+      {showPoReceived && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Unsigned quote</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {docAnalysis?.quoteComparison.summary
+                ?? "Customer sent PO only — compare unsigned primary quote to PO below."}
+            </p>
+          </div>
           <DocCompareColumn
             title="Baseline"
             subtitle="Unsigned quote"
@@ -354,93 +468,97 @@ export function QuoteReviewAnalysisReport({
             pageCount={docAnalysis?.quoteComparison.unsignedPages ?? null}
             titleFromPdf={docAnalysis?.unsigned?.title ?? null}
           />
-          <DocCompareColumn
-            title="Customer signed"
-            subtitle="Signed quote"
-            linkLabel="Open signed quote"
-            href={docs.signedQuoteUrl}
-            status={signedStatus}
-            pageCount={docAnalysis?.quoteComparison.signedPages ?? null}
-            titleFromPdf={docAnalysis?.signed?.title ?? null}
-          />
-        </div>
-        {quoteChecks.length > 0 ? (
-          <ComparisonCheckTable checks={quoteChecks} />
-        ) : (
-          <FlagTable flags={byCategory("manual").filter((f) => f.id.startsWith("pdf"))} />
-        )}
-      </section>
+          {quoteChecks.length > 0 && <ComparisonCheckTable checks={quoteChecks} />}
+        </section>
+      )}
 
-      <section className="space-y-3">
-        <div>
-          <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Data alignment</h3>
-          <p className="text-xs text-gray-500 mt-1">{alignment.summary}</p>
-        </div>
-        <AlignmentTable rows={alignment.rows} />
-        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm space-y-2">
-          <p>
-            <span className="font-medium text-gray-900">Overall alignment: </span>
-            <AlignmentBadge status={alignment.overallAligned ? "aligned" : alignment.overallSeverity === "warn" ? "mismatch" : "unknown"} />
-            {" "}
-            {docAnalysisLoading
-              ? "PDF analysis in progress — alignment status will update shortly."
-              : alignment.overallAligned
-                ? "Core fields match across Salesforce, signed quote, and PO."
-                : docAnalysis
-                  ? "Review mismatched rows above before accepting."
-                  : "Salesforce column populated — complete PDF analysis to compare signed quote and PO."}
-          </p>
-          {(poProvided || docAnalysis?.poAudit.present) && (
+      {(showUnsignedSignedComparison || showSignedOnly || showPoReceived) && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Data alignment</h3>
+            <p className="text-xs text-gray-500 mt-1">{alignment.summary}</p>
+          </div>
+          <AlignmentTable rows={alignment.rows} quoteColumnLabel={quoteColumnLabel} />
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-sm space-y-2">
             <p>
-              <span className="font-medium text-gray-900">PO T&amp;C conflict: </span>
-              {!docAnalysis && docAnalysisLoading && (
-                <span className="text-gray-500">Analyzing PO…</span>
-              )}
-              {!docAnalysis && !docAnalysisLoading && (
-                <span className="text-gray-500">
-                  {poProvided ? "Awaiting PO PDF analysis." : "No PO provided."}
-                </span>
-              )}
-              {docAnalysis && poProvided && !docAnalysis.purchaseOrder && (
-                <span className="text-amber-800">
-                  {docAnalysis.poAudit.tcConflictNote}
-                </span>
-              )}
-              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "none_detected" && (
-                <span className="text-green-800">No conflict detected in extracted text.</span>
-              )}
-              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "possible_conflict" && (
-                <span className="text-amber-800">
-                  {docAnalysis.poAudit.tcConflictNote}
-                  {docAnalysis.poAudit.tcConflictDetails.length > 0 && (
-                    <ul className="list-disc pl-5 mt-1 space-y-1 text-xs">
-                      {docAnalysis.poAudit.tcConflictDetails.map((d) => (
-                        <li key={d}>{d}</li>
-                      ))}
-                    </ul>
-                  )}
-                </span>
-              )}
-              {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "unknown" && (
-                <span className="text-gray-700">{docAnalysis.poAudit.tcConflictNote}</span>
-              )}
-              {docAnalysis?.poAudit.tcConflict === "not_applicable" && (
-                <span className="text-gray-500">No PO provided.</span>
-              )}
+              <span className="font-medium text-gray-900">Overall alignment: </span>
+              <AlignmentBadge status={alignment.overallAligned ? "aligned" : alignment.overallSeverity === "warn" ? "mismatch" : "unknown"} />
+              {" "}
+              {docAnalysisLoading
+                ? "PDF analysis in progress — alignment status will update shortly."
+                : alignment.overallAligned
+                  ? `Core fields match across Salesforce, ${quoteColumnLabel.toLowerCase()}, and PO.`
+                  : docAnalysis
+                    ? "Review mismatched rows above before accepting."
+                    : `Salesforce column populated — complete PDF analysis to compare ${quoteColumnLabel.toLowerCase()} and PO.`}
             </p>
-          )}
-        </div>
-      </section>
+            {(poProvided || docAnalysis?.poAudit.present) && (
+              <p>
+                <span className="font-medium text-gray-900">PO T&amp;C conflict: </span>
+                {!docAnalysis && docAnalysisLoading && (
+                  <span className="text-gray-500">Analyzing PO…</span>
+                )}
+                {!docAnalysis && !docAnalysisLoading && (
+                  <span className="text-gray-500">
+                    {poProvided ? "Awaiting PO PDF analysis." : "No PO provided."}
+                  </span>
+                )}
+                {docAnalysis && poProvided && !docAnalysis.purchaseOrder && (
+                  <span className="text-amber-800">
+                    {docAnalysis.poAudit.tcConflictNote}
+                  </span>
+                )}
+                {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "none_detected" && (
+                  <span className="text-green-800">No conflict detected in extracted text.</span>
+                )}
+                {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "possible_conflict" && (
+                  <span className="text-amber-800">
+                    {docAnalysis.poAudit.tcConflictNote}
+                    {docAnalysis.poAudit.tcConflictDetails.length > 0 && (
+                      <ul className="list-disc pl-5 mt-1 space-y-1 text-xs">
+                        {docAnalysis.poAudit.tcConflictDetails.map((d) => (
+                          <li key={d}>{d}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </span>
+                )}
+                {docAnalysis?.purchaseOrder && docAnalysis.poAudit.tcConflict === "unknown" && (
+                  <span className="text-gray-700">{docAnalysis.poAudit.tcConflictNote}</span>
+                )}
+                {docAnalysis?.poAudit.tcConflict === "not_applicable" && (
+                  <span className="text-gray-500">No PO provided.</span>
+                )}
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
-      {(docs.purchaseOrderUrl || byCategory("documents").some((f) => f.id.startsWith("po"))) && (
+      {showPoSection && (
         <section className="space-y-3">
           <div>
             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Purchase order</h3>
             <p className="text-xs text-gray-500 mt-1">
               {docAnalysis?.poAudit.summary
-                ?? "Compare the attached PO to the signed quote on price, product scope, and terms."}
+                ?? (showPoReceived
+                  ? "Compare the attached PO to the unsigned quote on price, product scope, terms, and quote number reference."
+                  : "Compare the attached PO to the signed quote on price, product scope, and terms.")}
             </p>
           </div>
+          {(extractedQuoteNumber || extractedPoNumber) && (
+            <div className="flex flex-wrap gap-4 text-sm rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+              {extractedQuoteNumber && (
+                <p><span className="font-medium text-gray-700">Quote #:</span> {extractedQuoteNumber}</p>
+              )}
+              {extractedPoNumber && (
+                <p><span className="font-medium text-gray-700">PO #:</span> {extractedPoNumber}</p>
+              )}
+              {showPoReceived && docAnalysis?.documentIds.poReferencesQuoteDetail && (
+                <p className="text-gray-600">{docAnalysis.documentIds.poReferencesQuoteDetail}</p>
+              )}
+            </div>
+          )}
           {docs.purchaseOrderUrl ? (
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <a

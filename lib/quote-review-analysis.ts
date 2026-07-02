@@ -1,6 +1,8 @@
 import { formatUsDate } from '@/lib/sf-field-format'
 import type { DocumentAnalysisBundle } from '@/lib/quote-alignment'
 import { documentFlagsFromAnalysis } from '@/lib/quote-alignment'
+import type { QuoteReviewMode } from '@/lib/quote-review-mode'
+import { resolveQuoteReviewMode } from '@/lib/quote-review-mode'
 
 export type AnalysisSeverity = 'pass' | 'warn' | 'fail' | 'pending'
 
@@ -19,6 +21,7 @@ export type AnalysisSummary = 'accept' | 'review' | 'hold'
 export type QuoteReviewInput = {
   winType: string | null
   winTypeValid: boolean
+  primaryQuoteStatus: string | null
   supportPlan: string | null
   userCount: number | null
   renewalDate: string | null
@@ -27,6 +30,9 @@ export type QuoteReviewInput = {
   unsignedQuoteUrl: string
   signedQuoteUrl: string
   purchaseOrderUrl: string
+  purchaseOrderRequirement?: string | null
+  reviewMode?: QuoteReviewMode
+  comparePo?: boolean
 }
 
 export type QuoteReviewAnalysis = {
@@ -58,6 +64,16 @@ export function buildQuoteReviewAnalysis(
 ): QuoteReviewAnalysis {
   const flags: AnalysisFlag[] = []
 
+  const reviewPlan = resolveQuoteReviewMode({
+    winType: input.winType,
+    primaryQuoteStatus: input.primaryQuoteStatus,
+    signedQuoteUrl: input.signedQuoteUrl,
+    purchaseOrderLink: input.purchaseOrderUrl,
+    purchaseOrderRequirement: input.purchaseOrderRequirement,
+  })
+  const mode = input.reviewMode ?? reviewPlan.mode
+  const comparePo = input.comparePo ?? reviewPlan.comparePo
+
   if (!input.winType?.trim()) {
     flags.push({
       id: 'win-type-missing',
@@ -78,63 +94,122 @@ export function buildQuoteReviewAnalysis(
     flags.push({
       id: 'win-type-ok',
       label: 'Win Type',
-      detail: `${input.winType} — eligible for signed quote review.`,
+      detail: `${input.winType} — ${reviewPlan.title}.`,
       severity: 'pass',
       category: 'gate',
     })
+    if (input.primaryQuoteStatus) {
+      flags.push({
+        id: 'primary-quote-status',
+        label: 'Primary quote status',
+        detail: input.primaryQuoteStatus,
+        severity: input.primaryQuoteStatus.toLowerCase() === 'signed' ? 'pass' : 'pending',
+        category: 'gate',
+      })
+    }
+    if (reviewPlan.poRequirementRaw) {
+      flags.push({
+        id: 'po-requirement',
+        label: 'Purchase Order field',
+        detail: reviewPlan.poRequirementRaw,
+        severity:
+          reviewPlan.poRequirement === 'not-required'
+            ? 'pass'
+            : reviewPlan.poRequirement === 'required-pending'
+              ? 'warn'
+              : reviewPlan.poRequirement === 'required-attached'
+                ? 'pass'
+                : 'pending',
+        category: 'gate',
+      })
+    }
   }
 
-  if (input.unsignedQuoteUrl.trim()) {
+  const needsUnsigned = mode === 'quote-signed-manual' || mode === 'po-received'
+  const needsSigned = mode === 'quote-signed-adobe' || mode === 'quote-signed-manual'
+  const needsPo = mode === 'po-received' || reviewPlan.requiresPo
+
+  if (needsUnsigned) {
+    if (input.unsignedQuoteUrl.trim()) {
+      flags.push({
+        id: 'unsigned-doc',
+        label: 'Unsigned quote',
+        detail: 'Baseline document link provided.',
+        severity: 'pass',
+        category: 'documents',
+      })
+    } else {
+      flags.push({
+        id: 'unsigned-missing',
+        label: 'Unsigned quote missing',
+        detail: 'Add the unsigned baseline quote link from the primary quote attachments.',
+        severity: 'fail',
+        category: 'documents',
+      })
+    }
+  }
+
+  if (needsSigned) {
+    if (input.signedQuoteUrl.trim()) {
+      flags.push({
+        id: 'signed-doc',
+        label: 'Signed quote',
+        detail: 'Customer signed document link provided.',
+        severity: 'pass',
+        category: 'documents',
+      })
+    } else {
+      flags.push({
+        id: 'signed-missing',
+        label: 'Signed quote missing',
+        detail: 'Add the signed quote link from the Signed Quote field.',
+        severity: 'fail',
+        category: 'documents',
+      })
+    }
+  }
+
+  if (comparePo) {
+    if (input.purchaseOrderUrl.trim()) {
+      flags.push({
+        id: 'po-provided',
+        label: 'Purchase order',
+        detail: documentAnalysis?.poAudit.summary
+          ?? 'PO document link provided — analysis pending.',
+        severity: documentAnalysis?.poAudit.overallSeverity ?? 'pending',
+        category: 'documents',
+      })
+    } else if (needsPo) {
+      flags.push({
+        id: 'po-missing',
+        label: 'Purchase order missing',
+        detail: 'Purchase Order is Required - Attached but no PO link was found on the opportunity.',
+        severity: 'fail',
+        category: 'documents',
+      })
+    }
+  } else if (reviewPlan.poRequirement === 'required-pending') {
     flags.push({
-      id: 'unsigned-doc',
-      label: 'Unsigned quote',
-      detail: 'Baseline document link provided.',
+      id: 'po-pending',
+      label: 'PO required — pending',
+      detail: 'PO is required but not yet attached. Proceed with signed quote review only.',
+      severity: 'warn',
+      category: 'documents',
+    })
+  } else if (reviewPlan.poRequirement === 'not-required') {
+    flags.push({
+      id: 'po-not-required',
+      label: 'PO not required',
+      detail: 'Purchase Order field is Not Required — no PO comparison needed.',
       severity: 'pass',
       category: 'documents',
     })
-  } else {
-    flags.push({
-      id: 'unsigned-missing',
-      label: 'Unsigned quote missing',
-      detail: 'Add the unsigned baseline quote link.',
-      severity: 'fail',
-      category: 'documents',
-    })
-  }
-
-  if (input.signedQuoteUrl.trim()) {
-    flags.push({
-      id: 'signed-doc',
-      label: 'Signed quote',
-      detail: 'Customer signed document link provided.',
-      severity: 'pass',
-      category: 'documents',
-    })
-  } else {
-    flags.push({
-      id: 'signed-missing',
-      label: 'Signed quote missing',
-      detail: 'Add the signed quote link.',
-      severity: 'fail',
-      category: 'documents',
-    })
-  }
-
-  if (input.purchaseOrderUrl.trim()) {
-    flags.push({
-      id: 'po-provided',
-      label: 'Purchase order',
-      detail: documentAnalysis?.poAudit.summary
-        ?? 'PO document link provided — analysis pending.',
-      severity: documentAnalysis?.poAudit.overallSeverity ?? 'pending',
-      category: 'documents',
-    })
-  } else {
+  } else if (mode === 'po-received') {
     flags.push({
       id: 'po-missing',
-      label: 'No PO link',
-      detail: 'Confirm whether a PO is contractually required. Request from customer if needed.',
-      severity: 'warn',
+      label: 'Purchase order missing',
+      detail: 'PO Received requires a purchase order link on the opportunity.',
+      severity: 'fail',
       category: 'documents',
     })
   }
@@ -143,18 +218,24 @@ export function buildQuoteReviewAnalysis(
     const docFlags = documentFlagsFromAnalysis(documentAnalysis)
     flags.push(...docFlags)
   } else {
+    const pendingDetail =
+      mode === 'quote-signed-adobe'
+        ? 'Analyzing signed quote and PO…'
+        : mode === 'po-received'
+          ? 'Analyzing unsigned quote and PO…'
+          : 'Analyzing PDFs…'
     flags.push({
       id: 'pdf-diff',
-      label: 'Signed vs unsigned comparison',
-      detail: 'Analyzing PDFs…',
+      label: 'Document comparison',
+      detail: pendingDetail,
       severity: 'pending',
       category: 'manual',
     })
 
-    if (input.purchaseOrderUrl.trim()) {
+    if (comparePo && input.purchaseOrderUrl.trim()) {
       flags.push({
         id: 'po-audit',
-        label: 'PO vs signed quote audit',
+        label: mode === 'po-received' ? 'PO vs unsigned quote audit' : 'PO vs signed quote audit',
         detail: 'Analyzing PO…',
         severity: 'pending',
         category: 'manual',
@@ -250,11 +331,19 @@ export function buildQuoteReviewAnalysis(
   } else if (hasWarn || hasPending) {
     summary = 'review'
     recommendation = hasPending
-      ? 'Complete manual document review (signed vs unsigned, and PO if applicable) before opening a provisioning ticket.'
-      : 'Review flagged items below, then proceed if documents match Salesforce and the signed quote.'
+      ? mode === 'quote-signed-adobe'
+        ? 'Complete manual review of the signed quote and PO before opening a provisioning ticket.'
+        : mode === 'po-received'
+          ? 'Complete manual review of the unsigned quote and PO before opening a provisioning ticket.'
+          : 'Complete manual document review (unsigned vs signed, and PO if applicable) before opening a provisioning ticket.'
+      : 'Review flagged items below, then proceed if documents match Salesforce and the quote.'
   } else {
     recommendation =
-      'Preliminary checks passed. Complete a quick visual compare of signed vs unsigned PDFs, then copy the provisioning template.'
+      mode === 'po-received'
+        ? 'Preliminary checks passed. Confirm unsigned quote vs PO alignment, then copy the provisioning template.'
+        : mode === 'quote-signed-adobe'
+          ? 'Preliminary checks passed. Confirm signed quote vs PO alignment, then copy the provisioning template.'
+          : 'Preliminary checks passed. Complete a quick visual compare of signed vs unsigned PDFs, then copy the provisioning template.'
   }
 
   return { flags, recommendation, summary, documentAnalysis: documentAnalysis ?? null }

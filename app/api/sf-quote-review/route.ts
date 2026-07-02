@@ -7,6 +7,8 @@ import {
   parseUserCountFromLines,
   toLightningBaseUrl,
 } from '@/lib/sf-field-format'
+import { resolveQuoteReviewMode } from '@/lib/quote-review-mode'
+import { fetchPrimaryQuoteInfo } from '@/lib/sf-primary-quote'
 
 const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
 
@@ -27,6 +29,7 @@ const BASE_FIELDS = [
 const QUOTE_REVIEW_FIELDS = [
   'Win_Type__c',
   'Signed_Quote__c',
+  'Purchase_Order__c',
   'Purchase_Order_Link__c',
   'NetSuite_Sub_Link__c',
   'Current_ARR__c',
@@ -61,6 +64,10 @@ const SUPPORT_FIELD_KEYS = [
   'Current_Support_Plan__c',
   'Entitlement__c',
   'Support_Tier__c',
+]
+
+const PO_REQUIREMENT_FIELD_KEYS = [
+  'Purchase_Order__c',
 ]
 
 const USER_COUNT_FIELD_KEYS = [
@@ -201,6 +208,23 @@ async function mapOpp(
 
   const contact = await bestContact(conn, opp.Id)
 
+  const primaryQuote = primaryQuoteId
+    ? await fetchPrimaryQuoteInfo(conn, primaryQuoteId, lightningBase)
+    : null
+
+  const signedQuoteUrl = extractUrlFromSfField(opp.Signed_Quote__c)
+  const purchaseOrderLink = extractUrlFromSfField(opp.Purchase_Order_Link__c)
+  const purchaseOrderRequirement = firstFieldValue(opp, PO_REQUIREMENT_FIELD_KEYS)
+
+  const reviewPlan = resolveQuoteReviewMode({
+    winType,
+    primaryQuoteStatus: primaryQuote?.status ?? null,
+    signedQuoteUrl,
+    purchaseOrderLink,
+    purchaseOrderRequirement:
+      purchaseOrderRequirement != null ? String(purchaseOrderRequirement) : null,
+  })
+
   return {
     id: opp.Id,
     name: opp.Name,
@@ -210,8 +234,20 @@ async function mapOpp(
     ownerName: opp.Owner?.Name ?? null,
     winType,
     winTypeValid: winType ? VALID_WIN_TYPES.has(winType) : false,
-    signedQuoteUrl: extractUrlFromSfField(opp.Signed_Quote__c),
-    purchaseOrderLink: extractUrlFromSfField(opp.Purchase_Order_Link__c),
+    signedQuoteUrl,
+    purchaseOrderLink,
+    purchaseOrderRequirement:
+      purchaseOrderRequirement != null ? String(purchaseOrderRequirement) : null,
+    comparePo: reviewPlan.comparePo,
+    primaryQuoteId,
+    primaryQuoteStatus: primaryQuote?.status ?? null,
+    primaryQuoteNumber: primaryQuote?.quoteNumber ?? null,
+    primaryQuoteUrl: primaryQuote?.quoteUrl ?? null,
+    unsignedQuoteAttachmentUrl: primaryQuote?.unsignedAttachmentUrl ?? null,
+    unsignedQuoteAttachmentTitle: primaryQuote?.unsignedAttachmentTitle ?? null,
+    reviewMode: reviewPlan.mode,
+    reviewModeTitle: reviewPlan.title,
+    reviewModeDescription: reviewPlan.description,
     netSuiteSubLink: extractUrlFromSfField(opp.NetSuite_Sub_Link__c),
     product,
     currentTerm: (opp.Current_Term__c ?? opp.Current_Billing_Term__c) ?? null,
