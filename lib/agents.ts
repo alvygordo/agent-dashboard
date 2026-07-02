@@ -110,7 +110,6 @@ export const workflows: Workflow[] = [
     name: "Signed Quote Reviewer",
     description: "Validate signed quote documents against Salesforce — paste doc links, review flags, and generate a provisioning template.",
     status: "active",
-    sandboxOnly: true,
     steps: [
       { agentId: "sf-agent", label: "Opportunity", requiresConfirmation: false },
       { agentId: "contract-finder", label: "Documents", requiresConfirmation: false },
