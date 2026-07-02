@@ -74,6 +74,39 @@ type DocLinks = {
   purchaseOrderUrl: string
 }
 
+function documentsBlockReason(
+  plan: ReturnType<typeof resolveQuoteReviewMode>,
+  docs: DocLinks,
+): string | null {
+  if (plan.mode === "unsupported") {
+    return "Win Type must be Quote Signed or PO Received"
+  }
+  if (plan.requiresUnsigned && !docs.unsignedQuoteUrl.trim()) {
+    return "Unsigned quote link is required — open the primary quote Notes & Attachments if not auto-filled"
+  }
+  if (plan.requiresSigned && !docs.signedQuoteUrl.trim()) {
+    return "Signed quote link is required from the Signed Quote field"
+  }
+  if (plan.requiresPo && !docs.purchaseOrderUrl.trim()) {
+    return "Purchase order link is required when Purchase Order is Required - Attached"
+  }
+  return null
+}
+
+function buildDocFetchKey(
+  reviewMode: QuoteReviewMode,
+  comparePo: boolean,
+  docs: DocLinks,
+): string {
+  return [
+    reviewMode,
+    comparePo ? "po" : "no-po",
+    docs.unsignedQuoteUrl.trim(),
+    docs.signedQuoteUrl.trim(),
+    comparePo ? docs.purchaseOrderUrl.trim() : "",
+  ].join("|")
+}
+
 const STEPS: { stepName: Step; label: string }[] = [
   { stepName: "opp-input", label: "Opportunity" },
   { stepName: "documents", label: "Documents" },
@@ -163,15 +196,6 @@ function SignedQuoteReviewerInner() {
     setVisitedSteps((prev) => new Set(prev).add(step))
   }, [step])
 
-  useEffect(() => {
-    if (step === "documents") {
-      setDocAnalysis(null)
-      setDocAnalysisError(null)
-      setDocAnalysisLoading(false)
-      docFetchKeyRef.current = null
-    }
-  }, [step])
-
   async function fetchOpp(nameOrId?: string) {
     const query = (nameOrId ?? oppQuery).trim()
     if (!query) {
@@ -224,15 +248,28 @@ function SignedQuoteReviewerInner() {
       comparePo: plan.comparePo,
     })
     setOppMatches([])
-    setDocs({
+    const newDocs: DocLinks = {
       unsignedQuoteUrl:
         plan.requiresUnsigned
           ? (opp.unsignedQuoteAttachmentUrl ?? "")
           : "",
       signedQuoteUrl: plan.requiresSigned ? (opp.signedQuoteUrl ?? "") : "",
       purchaseOrderUrl: plan.comparePo ? (opp.purchaseOrderLink ?? "") : "",
-    })
-    setStep("documents")
+    }
+    setDocs(newDocs)
+
+    const blockReason = documentsBlockReason(plan, newDocs)
+    if (!blockReason) {
+      setDocError("")
+      setDocAnalysis(null)
+      setDocAnalysisError(null)
+      docFetchKeyRef.current = null
+      setVisitedSteps((prev) => new Set(prev).add("documents"))
+      setStep("analysis")
+    } else {
+      setDocError("")
+      setStep("documents")
+    }
   }
 
   useEffect(() => {
@@ -251,46 +288,28 @@ function SignedQuoteReviewerInner() {
       purchaseOrderLink: docs.purchaseOrderUrl,
       purchaseOrderRequirement: oppData.purchaseOrderRequirement,
     })
-    if (plan.mode === "unsupported") {
-      setDocError("Win Type must be Quote Signed or PO Received")
-      return
-    }
-    if (plan.requiresUnsigned && !docs.unsignedQuoteUrl.trim()) {
-      setDocError("Unsigned quote link is required — open the primary quote Notes & Attachments if not auto-filled")
-      return
-    }
-    if (plan.requiresSigned && !docs.signedQuoteUrl.trim()) {
-      setDocError("Signed quote link is required from the Signed Quote field")
-      return
-    }
-    if (plan.requiresPo && !docs.purchaseOrderUrl.trim()) {
-      setDocError("Purchase order link is required when Purchase Order is Required - Attached")
+    const blockReason = documentsBlockReason(plan, docs)
+    if (blockReason) {
+      setDocError(blockReason)
       return
     }
     setDocError("")
-    setDocAnalysis(null)
-    setDocAnalysisError(null)
-    docFetchKeyRef.current = null
     setStep("analysis")
   }
 
   useEffect(() => {
     if (step !== "analysis" || !oppData) return
 
-    const reviewMode = oppData.reviewMode
-    const comparePo = oppData.comparePo
-    const fetchKey = [
-      reviewMode,
-      comparePo ? "po" : "no-po",
-      docs.unsignedQuoteUrl.trim(),
-      docs.signedQuoteUrl.trim(),
-      comparePo ? docs.purchaseOrderUrl.trim() : "",
-    ].join("|")
+    const fetchKey = buildDocFetchKey(oppData.reviewMode, oppData.comparePo, docs)
 
     if (docAnalysis && docFetchKeyRef.current === fetchKey) return
 
     let cancelled = false
+    const previousKey = docFetchKeyRef.current
     docFetchKeyRef.current = fetchKey
+    if (previousKey !== null && previousKey !== fetchKey) {
+      setDocAnalysis(null)
+    }
     setDocAnalysisLoading(true)
     setDocAnalysisError(null)
 
@@ -302,11 +321,11 @@ function SignedQuoteReviewerInner() {
       headers: { "Content-Type": "application/json" },
       signal: controller.signal,
       body: JSON.stringify({
-        analysisMode: reviewMode,
-        comparePo,
+        analysisMode: oppData.reviewMode,
+        comparePo: oppData.comparePo,
         unsignedQuoteUrl: docs.unsignedQuoteUrl,
         signedQuoteUrl: docs.signedQuoteUrl,
-        purchaseOrderUrl: comparePo ? docs.purchaseOrderUrl : "",
+        purchaseOrderUrl: oppData.comparePo ? docs.purchaseOrderUrl : "",
         salesforce: {
           accountName: oppData.accountName,
           product: oppData.product,
@@ -384,6 +403,9 @@ function SignedQuoteReviewerInner() {
     setDocs({ unsignedQuoteUrl: "", signedQuoteUrl: "", purchaseOrderUrl: "" })
     setDocAnalysis(null)
     setDocAnalysisError(null)
+    setDocAnalysisLoading(false)
+    docFetchKeyRef.current = null
+    setVisitedSteps(new Set(["opp-input"]))
   }
 
   const stepIndex = STEPS.findIndex((s) => s.stepName === step)
@@ -438,8 +460,8 @@ function SignedQuoteReviewerInner() {
         <div className="px-6 py-3 flex items-center gap-3 min-w-max">
           {STEPS.map((s, i) => {
             const isActive = step === s.stepName
-            const isDone = visitedSteps.has(s.stepName) && stepIndex > i
-            const isClickable = isDone && !isActive
+            const isDone = visitedSteps.has(s.stepName) || stepIndex > i
+            const isClickable = visitedSteps.has(s.stepName) && !isActive
             return (
               <div key={s.stepName} className="flex items-center gap-3">
                 <div className="flex items-center gap-2">

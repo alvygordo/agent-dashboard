@@ -619,7 +619,11 @@ function buildUnsignedSignedChecks(
   }
 
   quoteChecks.push(
-    compareQuotePair('Quote number', u?.quoteNumber ?? null, s?.quoteNumber ?? null),
+    compareQuotePair(
+      'Quote number',
+      resolveQuoteNumber(u?.quoteNumber ?? null, sf.primaryQuoteNumber),
+      resolveQuoteNumber(s?.quoteNumber ?? null, sf.primaryQuoteNumber),
+    ),
     compareQuotePair('Pricing / total', u?.totalAmount ?? null, s?.totalAmount ?? null),
     compareTermPair('Term length', u?.term ?? sfTermLabel(sf), s?.term ?? sfTermLabel(sf), 'unsigned', 'signed'),
     compareQuotePair('Product', sf.product ?? u?.product ?? null, s?.product ?? null),
@@ -699,12 +703,17 @@ export function buildDocumentAnalysis(
     if (signedErr) {
       quoteChecks.push({ check: 'Signed quote PDF', severity: 'fail', finding: signedErr.message })
     }
-    if (s?.quoteNumber) {
-      quoteChecks.push({
-        check: 'Quote number',
-        severity: 'pass',
-        finding: `Quote ${s.quoteNumber} extracted from Adobe-signed document.`,
-      })
+    if (s?.quoteNumber || sf.primaryQuoteNumber) {
+      const resolvedQuote = resolveQuoteNumber(s?.quoteNumber ?? null, sf.primaryQuoteNumber)
+      if (resolvedQuote) {
+        quoteChecks.push({
+          check: 'Quote number',
+          severity: 'pass',
+          finding: sf.primaryQuoteNumber
+            ? `Quote ${resolvedQuote} — primary quote ${sf.primaryQuoteNumber} from Salesforce.`
+            : `Quote ${resolvedQuote} extracted from Adobe-signed document.`,
+        })
+      }
     }
     quoteChecks.push(signedSignatureCheck(signed))
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
@@ -720,7 +729,7 @@ export function buildDocumentAnalysis(
       quoteChecks.push({
         check: 'Unsigned quote PDF',
         severity: 'pass',
-        finding: `Unsigned quote loaded${u?.quoteNumber ? ` — Quote ${u.quoteNumber}` : ''}${unsignedPages != null ? ` (${unsignedPages} page${unsignedPages === 1 ? '' : 's'})` : ''}.`,
+        finding: `Unsigned quote loaded${u?.quoteNumber || sf.primaryQuoteNumber ? ` — Quote ${resolveQuoteNumber(u?.quoteNumber ?? null, sf.primaryQuoteNumber) ?? sf.primaryQuoteNumber}` : ''}${unsignedPages != null ? ` (${unsignedPages} page${unsignedPages === 1 ? '' : 's'})` : ''}.`,
       })
     }
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
@@ -752,7 +761,7 @@ export function buildDocumentAnalysis(
   )
   const poNumber = p?.poNumber ?? null
   const quoteRef = mode === 'po-received'
-    ? poReferencesQuoteNumber(po, u?.quoteNumber ?? null)
+    ? poReferencesQuoteNumber(po, quoteNumber)
     : { found: null as boolean | null, detail: '' }
 
   if (poProvided) {
