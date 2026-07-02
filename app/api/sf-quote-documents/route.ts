@@ -6,7 +6,7 @@ import {
   type DocumentAnalysisBundle,
   type SfAlignmentInput,
 } from '@/lib/quote-alignment'
-import { parseDocumentText } from '@/lib/quote-field-extract'
+import { type ExtractOptions, parseDocumentText } from '@/lib/quote-field-extract'
 import { connectSalesforce } from '@/lib/sf-connect'
 
 export const maxDuration = 60
@@ -22,6 +22,7 @@ async function analyzeUrl(
   conn: Awaited<ReturnType<typeof connectSalesforce>>,
   url: string,
   docKind: 'quote' | 'po',
+  extractOptions?: ExtractOptions,
 ): Promise<{ doc: ReturnType<typeof parseDocumentText> | null; error: string | null }> {
   const trimmed = url.trim()
   if (!trimmed) return { doc: null, error: null }
@@ -44,7 +45,11 @@ async function analyzeUrl(
     const doc = parseDocumentText(parsed.text, {
       title: downloaded.title,
       pageCount: parsed.pageCount,
+      pageTexts: parsed.pageTexts,
       docKind,
+      productHint: extractOptions?.productHint,
+      expectedTotal: extractOptions?.expectedTotal,
+      mirrorSupplier: extractOptions?.mirrorSupplier,
     })
     return { doc, error: null }
   } catch (err: unknown) {
@@ -71,12 +76,20 @@ export async function POST(req: NextRequest) {
   try {
     const conn = await connectSalesforce()
     const poProvided = Boolean(body.purchaseOrderUrl?.trim())
+    const productHint = body.salesforce.product
 
-    const [unsignedResult, signedResult, poResult] = await Promise.all([
-      analyzeUrl(conn, body.unsignedQuoteUrl, 'quote'),
-      analyzeUrl(conn, body.signedQuoteUrl, 'quote'),
-      poProvided ? analyzeUrl(conn, body.purchaseOrderUrl!, 'po') : Promise.resolve({ doc: null, error: null }),
-    ])
+    const unsignedResult = await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', { productHint, docKind: 'quote' })
+    const signedResult = await analyzeUrl(conn, body.signedQuoteUrl, 'quote', {
+      productHint,
+      docKind: 'quote',
+      expectedTotal: unsignedResult.doc?.fields.totalAmount ?? null,
+    })
+    const poResult = poProvided
+      ? await analyzeUrl(conn, body.purchaseOrderUrl!, 'po', {
+          docKind: 'po',
+          mirrorSupplier: signedResult.doc?.fields.supplierName ?? null,
+        })
+      : { doc: null, error: null }
 
     const errors: DocumentAnalysisBundle['errors'] = []
     if (unsignedResult.error) errors.push({ doc: 'unsigned', message: unsignedResult.error })
