@@ -15,7 +15,7 @@ type SFTask = {
   dueDate: string | null
   taskUrl: string
   oppUrl: string | null
-  caseLink: { url: string; status: string; label: string } | null
+  caseLink: { url: string; status: string } | null
 }
 
 const KHOROS_GEM_URL    = "https://gemini.google.com/gem/2cc0ea7b4320"
@@ -74,19 +74,14 @@ function formatDate(dateStr: string | null) {
   return <span className={isOverdue ? "text-red-600 font-medium" : "text-gray-700"}>{label}</span>
 }
 
-function CaseLinkButton({ caseLink }: { caseLink: { url: string; status: string; label: string } }) {
+function CaseLinkButton({ caseLink }: { caseLink: { url: string; status: string } }) {
   return (
-    <a href={caseLink.url} target="_blank" rel="noopener noreferrer">
-      <Button size="sm" variant="outline"
-        className="border-blue-200 text-blue-700 hover:bg-blue-50 cursor-pointer gap-1.5 text-xs font-medium h-auto py-1.5">
-        <ExternalLink className="w-3 h-3 shrink-0" />
-        <span>{caseLink.label}</span>
-        {caseLink.status && (
-          <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-medium ml-0.5">
-            {caseLink.status}
-          </Badge>
-        )}
-      </Button>
+    <a href={caseLink.url} target="_blank" rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 group">
+      <Badge className="bg-blue-50 text-blue-700 border-blue-200 font-medium hover:bg-blue-100 transition-colors">
+        {caseLink.status || "Open"}
+      </Badge>
+      <ExternalLink className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
     </a>
   )
 }

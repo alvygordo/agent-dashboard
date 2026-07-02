@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
       dueDate:  t.ActivityDate,
       taskUrl:  `${instanceUrl}/lightning/r/Task/${t.Id}/view`,
       oppUrl:   t.WhatId ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view` : null,
-      caseLink: null as { url: string; status: string; label: string } | null,
+      caseLink: null as { url: string; status: string } | null,
     }))
 
     const legalOppIds = baseTasks
@@ -78,7 +78,6 @@ export async function GET(req: NextRequest) {
             caseLink: {
               url: sfCaseUrl(instanceUrl, legalCase.id),
               status: legalCase.status,
-              label: 'Legal Case',
             },
           }
         }
@@ -92,7 +91,6 @@ export async function GET(req: NextRequest) {
             caseLink: {
               url: sfCaseUrl(instanceUrl, nnrCase.id),
               status: nnrCase.status,
-              label: 'NNR Case',
             },
           }
         }
