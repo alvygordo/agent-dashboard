@@ -280,13 +280,17 @@ function buildAlignmentRows(
     }
 
     const signedDisplay = spec.signedDisplay ?? (signedVal
-      ? formatFieldValue(signedVal)
+      ? (spec.field.includes('date') || spec.field.includes('term end')
+        ? formatUsDate(signedVal)
+        : formatFieldValue(signedVal))
       : signedFailed ? 'Not extracted (download failed)' : '—')
 
     const poDisplay = spec.poDisplay ?? (!poProvided
       ? 'N/A'
       : poVal
-        ? formatFieldValue(poVal)
+        ? (spec.field.includes('date') || spec.field.includes('term end')
+          ? formatUsDate(poVal)
+          : formatFieldValue(poVal))
         : poFailed ? 'Not extracted (download failed)' : '—')
 
     return {

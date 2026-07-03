@@ -18,6 +18,7 @@ import {
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { resolveQuoteNumber } from "@/lib/quote-alignment"
+import { resolveQuoteExpiryDate } from "@/lib/quote-field-extract"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
 import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
@@ -128,22 +129,26 @@ function buildProvisioningTemplate(
   opp: OppData,
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
-  const quoteFields = quoteFieldsForTemplate(docAnalysis)
-  const endUser = opp.accountName ?? "[Insert End User Name]"
-  const customer = opp.accountName ?? "[Insert Customer Name]"
-  const termSource = quoteFields?.term ?? opp.currentTerm
+  const signedFields = docAnalysis?.signed?.fields ?? null
+  const unsignedFields = docAnalysis?.unsigned?.fields ?? null
+  const termSource = signedFields?.term ?? unsignedFields?.term ?? opp.currentTerm
   const months = formatTermMonthsOnly(termSource)
   const termLabel = formatTermLabel(termSource)
   const product = opp.product ?? "[Insert Product Name]"
   const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
-  const renewal = quoteFields?.renewalDate
-    ? formatUsDate(quoteFields.renewalDate)
-    : formatUsDate(opp.renewalDate)
-  const expiry = quoteFields?.expiryDate
-    ? formatUsDate(quoteFields.expiryDate)
-    : formatUsDate(opp.expiryDate)
+  const renewalRaw = signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate
+  const renewal = renewalRaw ? formatUsDate(renewalRaw) : formatUsDate(opp.renewalDate)
+  const expiryResolved = resolveQuoteExpiryDate({
+    renewalDate: renewalRaw,
+    extractedExpiry: signedFields?.expiryDate,
+    alternateExpiry: unsignedFields?.expiryDate,
+    term: termSource,
+  })
+  const expiry = expiryResolved ? formatUsDate(expiryResolved) : "[Insert MM/DD/YYYY]"
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
+  const endUser = opp.accountName ?? "[Insert End User Name]"
+  const customer = opp.accountName ?? "[Insert Customer Name]"
   const supportPlan = fieldOrPlaceholder(opp.supportPlan, "[Insert Standard, Gold, or Platinum]")
   const userCount = opp.userCount != null && opp.userCount > 0
     ? String(opp.userCount)

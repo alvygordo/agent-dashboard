@@ -143,6 +143,60 @@ export function datesAlign(a: string | null | undefined, b: string | null | unde
   return na === nb
 }
 
+/** New-term expiry should be on or after the renewal / term start date. */
+export function isExpiryOnOrAfterRenewal(
+  expiry: string | null | undefined,
+  renewal: string | null | undefined,
+): boolean {
+  const e = normalizeDateForCompare(expiry)
+  const r = normalizeDateForCompare(renewal)
+  if (!e || !r) return false
+  return e >= r
+}
+
+/** Expiry = day before renewal anniversary after term months (e.g. 07/01/2026 + 12mo → 06/30/2027). */
+export function computeExpiryFromRenewalAndTerm(renewal: string, termMonths: number): string {
+  const norm = normalizeDateForCompare(renewal)
+  if (!norm || termMonths <= 0) return renewal
+  const [y, m, d] = norm.split('-').map(Number)
+  const date = new Date(Date.UTC(y, m - 1, d))
+  date.setUTCMonth(date.getUTCMonth() + termMonths)
+  date.setUTCDate(date.getUTCDate() - 1)
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
+/** Normalize extracted/computed dates to MM/DD/YYYY for display and storage. */
+function formatStoredDate(value: string): string {
+  const norm = normalizeDateForCompare(value)
+  if (!norm) return value.trim()
+  const [y, m, d] = norm.split('-')
+  return `${m}/${d}/${y}`
+}
+
+export function resolveQuoteExpiryDate(args: {
+  renewalDate: string | null | undefined
+  extractedExpiry: string | null | undefined
+  alternateExpiry?: string | null | undefined
+  term: string | number | null | undefined
+}): string | null {
+  const renewal = args.renewalDate
+  const candidates = [args.extractedExpiry, args.alternateExpiry].filter(Boolean) as string[]
+
+  // Accept only a Term End Date on/after the renewal (new term), not Current Term End.
+  for (const candidate of candidates) {
+    if (renewal && isExpiryOnOrAfterRenewal(candidate, renewal)) {
+      return formatStoredDate(candidate)
+    }
+  }
+
+  const months = termDurationMonths(args.term)
+  if (renewal && months) {
+    return formatStoredDate(computeExpiryFromRenewalAndTerm(renewal, months))
+  }
+
+  return null
+}
+
 function parseFlexibleDate(value: string): string | null {
   const v = value.trim()
   if (isPlausibleDate(v)) return v
@@ -165,10 +219,10 @@ function extractLabeledFlexibleDate(text: string, labels: string[]): string | nu
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(
       `${escaped}\\s*:?\\s*(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
-      'i',
+      'gi',
     )
-    const m = text.match(re)
-    if (m?.[1]) {
+    for (const m of text.matchAll(re)) {
+      if (m.index != null && isCurrentTermEndContext(text, m.index)) continue
       const parsed = parseFlexibleDate(m[1])
       if (parsed) return parsed
     }
@@ -265,34 +319,104 @@ function extractLabeledDate(text: string, labels: string[]): string | null {
   return null
 }
 
-function extractDates(text: string, pageTexts?: string[]): { renewal: string | null; expiry: string | null } {
+function isCurrentTermEndContext(text: string, matchIndex: number): boolean {
+  const start = Math.max(0, matchIndex - 15)
+  return /\bcurrent\s+term\s+end\b/i.test(text.slice(start, matchIndex + 12))
+}
+
+function extractAllLabeledFlexibleDates(text: string, labels: string[]): string[] {
+  const results: string[] = []
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(
+      `${escaped}\\s*:?\\s*(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+      'gi',
+    )
+    for (const m of text.matchAll(re)) {
+      if (m.index != null && isCurrentTermEndContext(text, m.index)) continue
+      const parsed = parseFlexibleDate(m[1])
+      if (parsed) results.push(parsed)
+    }
+  }
+  return results
+}
+
+function pickBestExpiryDate(candidates: string[], renewal: string | null): string | null {
+  const normalized = candidates
+    .map((raw) => ({ raw, norm: normalizeDateForCompare(raw) }))
+    .filter((x): x is { raw: string; norm: string } => Boolean(x.norm))
+
+  if (normalized.length === 0) return null
+
+  if (renewal) {
+    const r = normalizeDateForCompare(renewal)
+    const afterRenewal = normalized.filter((x) => r && x.norm >= r)
+    if (afterRenewal.length > 0) {
+      return afterRenewal.sort((a, b) => b.norm.localeCompare(a.norm))[0].raw
+    }
+  }
+
+  return normalized.sort((a, b) => b.norm.localeCompare(a.norm))[0].raw
+}
+
+function extractDates(
+  text: string,
+  pageTexts?: string[],
+  renewalDateHint?: string | null,
+): { renewal: string | null; expiry: string | null } {
   const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
 
   let renewal = extractLabeledFlexibleDate(headerScope, [
     'Term Start Date', 'Term start date', 'Renewal Date', 'Renewal date',
     'Subscription Start Date', 'Start Date', 'Service Start Date', 'Effective Date',
   ])
-  let expiry = extractLabeledFlexibleDate(headerScope, [
-    'Term End Date', 'Term end date', 'Expiry Date', 'Expiration Date',
-    'Subscription End Date', 'End Date', 'Current Term End', 'Term End', 'Contract End',
-  ])
+  if (!renewal) renewal = renewalDateHint ?? null
+
+  const primaryTermEndLabels = [
+    'Term End Date', 'Term end date', 'New Term End Date', 'New term end date',
+    'Subscription End Date', 'Subscription end date',
+  ]
+  const secondaryTermEndLabels = [
+    'Expiry Date', 'Expiration Date', 'Contract End Date', 'Contract End',
+  ]
+
+  let expiry = extractLabeledFlexibleDate(headerScope, primaryTermEndLabels)
+    ?? pickBestExpiryDate(
+      extractAllLabeledFlexibleDates(headerScope, [...primaryTermEndLabels, ...secondaryTermEndLabels]),
+      renewal,
+    )
 
   if (!renewal || !expiry) {
-    const fallback = extractDatesFromFullText(text)
-    if (!renewal) renewal = fallback.renewal
+    const fallback = extractDatesFromFullText(text, renewal)
+    if (!renewal) renewal = fallback.renewal ?? renewalDateHint ?? null
     if (!expiry) expiry = fallback.expiry
+  }
+
+  if (expiry && renewal && !isExpiryOnOrAfterRenewal(expiry, renewal)) {
+    expiry = extractLabeledFlexibleDate(text, primaryTermEndLabels)
+      ?? pickBestExpiryDate(
+        extractAllLabeledFlexibleDates(text, [...primaryTermEndLabels, ...secondaryTermEndLabels]),
+        renewal,
+      )
   }
 
   return { renewal, expiry }
 }
 
-function extractDatesFromFullText(text: string): { renewal: string | null; expiry: string | null } {
+function extractDatesFromFullText(text: string, renewalHint?: string | null): { renewal: string | null; expiry: string | null } {
   let renewal = extractLabeledFlexibleDate(text, [
     'Term Start Date', 'Renewal Date', 'Subscription Start Date', 'Start Date', 'Effective Date',
   ])
   let expiry = extractLabeledFlexibleDate(text, [
-    'Term End Date', 'Expiry Date', 'Expiration Date', 'Subscription End Date', 'End Date', 'Term End',
+    'Term End Date', 'Term end date', 'New Term End Date', 'Subscription End Date',
   ])
+    ?? pickBestExpiryDate(
+      extractAllLabeledFlexibleDates(text, [
+        'Term End Date', 'Term end date', 'Expiry Date', 'Expiration Date',
+        'Subscription End Date', 'Contract End Date', 'Contract End',
+      ]),
+      renewal ?? renewalHint ?? null,
+    )
 
   const periodRange = text.match(
     /(?:subscription|service|contract|license)\s+period\s*:?\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})\s*(?:to|through|until|-|–)\s*(\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4})/i,
@@ -316,6 +440,11 @@ function extractDatesFromFullText(text: string): { renewal: string | null; expir
   if (spelledRange) {
     if (!renewal) renewal = parseSpelledDate(spelledRange[1])
     if (!expiry) expiry = parseSpelledDate(spelledRange[2])
+  }
+
+  const renewalFinal = renewal ?? renewalHint ?? null
+  if (expiry && renewalFinal && !isExpiryOnOrAfterRenewal(expiry, renewalFinal)) {
+    expiry = null
   }
 
   return { renewal, expiry }
@@ -872,7 +1001,7 @@ export function extractFieldsFromText(
   options?: ExtractOptions,
 ): ExtractedDocumentFields {
   const pageTexts = options?.pageTexts
-  const dates = extractDates(text, pageTexts)
+  const dates = extractDates(text, pageTexts, options?.renewalDateHint)
   const poNumber = firstMatch(text, /\bPO\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
     ?? firstMatch(text, /\bPurchase\s*Order\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
 
@@ -899,6 +1028,15 @@ export function extractFieldsFromText(
     notes.push('Very little text extracted — document may be scanned/image-only.')
   }
 
+  const term = extractTerm(text, options?.termHint, pageTexts)
+  const renewalDate = dates.renewal ?? options?.renewalDateHint ?? null
+  const expiryDate = resolveQuoteExpiryDate({
+    renewalDate,
+    extractedExpiry: dates.expiry,
+    alternateExpiry: options?.docKind === 'quote' ? undefined : options?.expiryDateHint,
+    term,
+  })
+
   return {
     customerName: extractCustomerName(text, pageTexts, options?.accountNameHint),
     endUserName: extractAfterLabels(text, ['End User', 'End-User', 'End Customer', 'End User Name']),
@@ -907,14 +1045,14 @@ export function extractFieldsFromText(
     product,
     supportPlan: extractSupportPlan(text, options?.supportPlanHint, pageTexts),
     quantity: extractQuantity(text, pageTexts, notes, options?.quantityHint, options?.expectedTotal),
-    renewalDate: dates.renewal,
-    expiryDate: dates.expiry,
+    renewalDate,
+    expiryDate,
     supplierName: extractSupplier(text, options?.mirrorSupplier, pageTexts),
     paymentTerms: extractPaymentTerms(text, pageTexts, options?.docKind),
     quoteNumber,
     poNumber,
     totalAmount: extractTotal(text, options?.expectedTotal),
-    term: extractTerm(text, options?.termHint, pageTexts),
+    term,
     signerName: signature.signerName,
     signedDate: signature.signedDate,
     notes,
@@ -966,7 +1104,12 @@ export function sanitizeQuoteFields(
     supportPlan: pick(fields.supportPlan, unsignedFields?.supportPlan, hints.supportPlan ?? null, isPlausibleSupportPlan),
     paymentTerms,
     renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
-    expiryDate: fields.expiryDate ?? unsignedFields?.expiryDate ?? hints.expiryDate ?? null,
+    expiryDate: resolveQuoteExpiryDate({
+      renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
+      extractedExpiry: fields.expiryDate,
+      alternateExpiry: unsignedFields?.expiryDate,
+      term: fields.term ?? unsignedFields?.term ?? null,
+    }),
   }
 }
 
@@ -1037,9 +1180,10 @@ export function valuesAlign(a: string | null | undefined, b: string | null | und
   return na.includes(nb) || nb.includes(na)
 }
 
-export function termDurationMonths(value: string | null | undefined): number | null {
-  if (!value?.trim()) return null
-  const v = value.trim()
+export function termDurationMonths(value: string | number | null | undefined): number | null {
+  if (value == null) return null
+  const v = String(value).trim()
+  if (!v) return null
   const months = v.match(/(\d+)\s*(?:month|months|mo)\b/i)
   if (months) return parseInt(months[1], 10)
   const years = v.match(/(\d+(?:\.\d+)?)\s*(?:year|years|yr)\b/i)

@@ -127,7 +127,6 @@ export async function POST(req: NextRequest) {
           supportPlanHint,
           expectedTotal: arrHint,
           renewalDateHint: body.salesforce.renewalDate,
-          expiryDateHint: body.salesforce.expiryDate,
         })
       : { doc: null, error: null }
 
@@ -147,7 +146,6 @@ export async function POST(req: NextRequest) {
           accountNameHint,
           supportPlanHint,
           renewalDateHint: body.salesforce.renewalDate,
-          expiryDateHint: body.salesforce.expiryDate,
         })
       : { doc: null, error: null }
 
