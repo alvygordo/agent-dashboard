@@ -116,28 +116,38 @@ const STEPS: { stepName: Step; label: string }[] = [
 
 const STEP_COUNT = STEPS.length
 
+function quoteFieldsForTemplate(docAnalysis?: DocumentAnalysisBundle | null) {
+  if (!docAnalysis) return null
+  if (docAnalysis.analysisMode === "po-received") {
+    return docAnalysis.unsigned?.fields ?? docAnalysis.signed?.fields ?? null
+  }
+  return docAnalysis.signed?.fields ?? docAnalysis.unsigned?.fields ?? null
+}
+
 function buildProvisioningTemplate(
   opp: OppData,
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
+  const quoteFields = quoteFieldsForTemplate(docAnalysis)
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
-  const months = formatTermMonthsOnly(opp.currentTerm)
-  const termLabel = formatTermLabel(opp.currentTerm)
+  const termSource = quoteFields?.term ?? opp.currentTerm
+  const months = formatTermMonthsOnly(termSource)
+  const termLabel = formatTermLabel(termSource)
   const product = opp.product ?? "[Insert Product Name]"
   const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
-  const renewal = formatUsDate(opp.renewalDate)
-  const expiry = formatUsDate(opp.expiryDate)
+  const renewal = quoteFields?.renewalDate
+    ? formatUsDate(quoteFields.renewalDate)
+    : formatUsDate(opp.renewalDate)
+  const expiry = quoteFields?.expiryDate
+    ? formatUsDate(quoteFields.expiryDate)
+    : formatUsDate(opp.expiryDate)
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
   const supportPlan = fieldOrPlaceholder(opp.supportPlan, "[Insert Standard, Gold, or Platinum]")
   const userCount = opp.userCount != null && opp.userCount > 0
     ? String(opp.userCount)
     : "[Insert User/Seat Count]"
-  const winType = opp.winType ?? "[Insert Win Type]"
-  const quoteNumber =
-    resolveQuoteNumber(docAnalysis?.documentIds.quoteNumber, opp.primaryQuoteNumber)
-    ?? "[Insert Quote #]"
   const poNumber = docAnalysis?.documentIds.poNumber ?? null
   const reason =
     opp.winType === "PO Received"
@@ -149,8 +159,6 @@ function buildProvisioningTemplate(
     "",
     `Customer Name: ${customer}`,
     `End user: ${endUser}`,
-    `Win Type: ${winType}`,
-    `Quote #: ${quoteNumber}`,
     ...(poNumber ? [`PO #: ${poNumber}`] : []),
     `Netsuite subscription: ${nsLink}`,
     `Salesforce opportunity: ${opp.oppUrl}`,
