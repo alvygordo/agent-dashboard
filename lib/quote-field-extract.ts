@@ -47,6 +47,8 @@ export type ExtractOptions = {
   titleHint?: string | null
   quoteNumberHint?: string | null
   quantityHint?: string | number | null
+  accountNameHint?: string | null
+  supportPlanHint?: string | null
   renewalDateHint?: string | null
   expiryDateHint?: string | null
   pageTexts?: string[]
@@ -55,7 +57,7 @@ export type ExtractOptions = {
 const SUPPORT_PLANS = ['Platinum', 'Gold', 'Standard', 'Premium', 'Enterprise']
 const KNOWN_PRODUCTS = [
   'CloudSense', 'Cloudsense', 'DevOps Platform', 'DevOpsPlatform', 'Khoros',
-  'AnswerHub', 'Exceed', 'Bold360', 'ACME',
+  'AnswerHub', 'Exceed', 'Bold360', 'ACME', 'Pivotal',
 ]
 const KNOWN_SUPPLIERS = ['Skyvera', 'Trilogy', 'Aurea', 'GFI', 'Versata', 'IgniteTech']
 const GARBAGE_VALUES = /^(item description|unit price|confidential|prepared|security|english|payment termsnet|amount|qty|quantity|description|total|subtotal|revised|quote|date|s:|n\/a|reference)$/i
@@ -182,7 +184,41 @@ function cleanExtracted(value: string | null | undefined, maxLen = 80): string |
   if (/item description|unit price|payment termsnet/i.test(v)) return null
   if (/\$[\d,]+.*\$/.test(v)) return null
   if (/^[a-z]\.\s/i.test(v) && v.length < 20) return null
+  if (/^,\s*|,\s*technical support/i.test(v)) return null
+  if (/agree\s+to\s+the\s+terms|agree\s+to\s+the/i.test(v)) return null
   return v
+}
+
+export function isPlausibleProductName(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false
+  const v = value.trim()
+  if (v.length < 3) return false
+  if (/^[a-z]\.?$/i.test(v)) return false
+  if (/^s\.?$/i.test(v)) return false
+  if (/agree|terms of|technical support|shall be/i.test(v)) return false
+  return true
+}
+
+export function isPlausiblePartyName(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false
+  const v = value.trim()
+  if (v.length < 3 || v.length > 80) return false
+  if (/^agree\b/i.test(v)) return false
+  if (/agree\s+to|terms\s+of|hereby|shall\s+be/i.test(v)) return false
+  return true
+}
+
+export function isPlausibleSupportPlan(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false
+  return SUPPORT_PLANS.some((plan) => new RegExp(`^${plan}$`, 'i').test(value.trim()))
+}
+
+export function isPlausiblePaymentTerms(value: string | null | undefined): boolean {
+  if (!value?.trim()) return false
+  const v = value.trim()
+  if (/^,\s*/.test(v)) return false
+  if (/technical support|,\s*project/i.test(v) && !/\bnet\s*\d+/i.test(v)) return false
+  return Boolean(normalizePaymentTerms(v))
 }
 
 function extractAfterLabels(text: string, labels: string[]): string | null {
@@ -195,6 +231,27 @@ function extractAfterLabels(text: string, labels: string[]): string | null {
       if (val) return val
     }
   }
+  return null
+}
+
+function extractCustomerName(
+  text: string,
+  pageTexts?: string[],
+  accountNameHint?: string | null,
+): string | null {
+  const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 6000)
+
+  for (const label of ['Bill To', 'Customer Name', 'Customer', 'Sold To', 'Account Name']) {
+    const val = extractAfterLabels(headerScope, [label])
+    if (val && isPlausiblePartyName(val)) return val
+  }
+
+  if (accountNameHint?.trim()) {
+    const hint = accountNameHint.trim()
+    const escaped = hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(escaped.replace(/\s+/g, '\\s+'), 'i').test(headerScope)) return hint
+  }
+
   return null
 }
 
@@ -264,17 +321,23 @@ function extractDatesFromFullText(text: string): { renewal: string | null; expir
   return { renewal, expiry }
 }
 
-function extractProduct(text: string, productHint?: string | null): string | null {
-  if (productHint) {
+function extractProduct(text: string, productHint?: string | null, pageTexts?: string[]): string | null {
+  const scope = pageTexts?.slice(0, 4).join('\n') ?? text.slice(0, 15_000)
+
+  if (productHint?.trim()) {
     const hint = productHint.trim()
-    if (hint && new RegExp(hint.replace(/\s+/g, '\\s*'), 'i').test(text)) return hint
+    if (hint.length >= 3) {
+      const escaped = hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      if (new RegExp(`\\b${escaped}\\b`, 'i').test(scope)) return hint
+      if (new RegExp(escaped.replace(/\s+/g, '\\s*'), 'i').test(scope)) return hint
+    }
   }
 
-  const fromLabel = extractAfterLabels(text, ['Product', 'Product Name', 'Software Product'])
-  if (fromLabel) return fromLabel
+  const fromLabel = extractAfterLabels(scope, ['Product', 'Product Name', 'Software Product', 'Item Description'])
+  if (fromLabel && isPlausibleProductName(fromLabel)) return fromLabel
 
   for (const product of KNOWN_PRODUCTS) {
-    if (new RegExp(`\\b${product.replace(/\s+/g, '\\s*')}\\b`, 'i').test(text)) return product
+    if (new RegExp(`\\b${product.replace(/\s+/g, '\\s*')}\\b`, 'i').test(scope)) return product
   }
 
   return null
@@ -434,15 +497,33 @@ function extractQuantity(
   return null
 }
 
-function extractSupportPlan(text: string): string | null {
-  for (const plan of SUPPORT_PLANS) {
-    if (new RegExp(`\\b${plan}\\b`, 'i').test(text)) {
-      const supportLine = extractAfterLabels(text, ['Support Plan', 'Support Level', 'Support Tier', 'Success Plan'])
-      if (supportLine && new RegExp(plan, 'i').test(supportLine)) return plan
-      return plan
+function extractSupportPlan(
+  text: string,
+  supportPlanHint?: string | null,
+  pageTexts?: string[],
+): string | null {
+  const headerScope = pageTexts?.slice(0, 3).join('\n') ?? text.slice(0, 8000)
+
+  const fromLabel = extractAfterLabels(headerScope, ['Support Plan', 'Support Level', 'Support Tier', 'Success Plan'])
+  if (fromLabel) {
+    for (const plan of SUPPORT_PLANS) {
+      if (new RegExp(`\\b${plan}\\b`, 'i').test(fromLabel)) return plan
     }
+    const cleaned = cleanExtracted(fromLabel, 30)
+    if (cleaned && isPlausibleSupportPlan(cleaned)) return cleaned
   }
-  return extractAfterLabels(text, ['Support Plan', 'Support Level', 'Support Tier'])
+
+  for (const plan of SUPPORT_PLANS) {
+    const nearSupport = new RegExp(`(?:support\\s+plan|support\\s+level|success\\s+plan)[^\\n]{0,30}\\b${plan}\\b`, 'i')
+    if (nearSupport.test(headerScope)) return plan
+  }
+
+  if (supportPlanHint?.trim() && isPlausibleSupportPlan(supportPlanHint)) {
+    const escaped = supportPlanHint.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    if (new RegExp(`\\b${escaped}\\b`, 'i').test(headerScope)) return supportPlanHint.trim()
+  }
+
+  return null
 }
 
 export function normalizePaymentTerms(value: string | null | undefined): string | null {
@@ -486,7 +567,7 @@ function extractPaymentTerms(text: string, pageTexts?: string[], docKind?: 'quot
     const paymentTermsLine = scope.match(/Payment\s*Terms\s*:?\s*([^\n]{3,50})/i)
     if (paymentTermsLine) {
       const normalized = normalizePaymentTerms(paymentTermsLine[1])
-      if (normalized) return normalized
+      if (normalized && isPlausiblePaymentTerms(normalized)) return normalized
     }
   }
 
@@ -496,9 +577,10 @@ function extractPaymentTerms(text: string, pageTexts?: string[], docKind?: 'quot
   const standardNets = netMatches.filter((n) => [10, 15, 30, 45, 60, 90].includes(n))
   if (standardNets.length > 0) return `Net ${standardNets[0]}`
 
-  return normalizePaymentTerms(
+  const fallback = normalizePaymentTerms(
     extractAfterLabels(text, ['Payment Terms', 'Payment Term', 'Terms of Payment', 'Billing Terms', 'PAYMENT']),
   )
+  return fallback && isPlausiblePaymentTerms(fallback) ? fallback : null
 }
 
 function parseAmount(raw: string): number {
@@ -801,7 +883,7 @@ export function extractFieldsFromText(
 
   const product = options?.docKind === 'po'
     ? extractPoProduct(text, options?.productHint, pageTexts)
-    : extractProduct(text, options?.productHint)
+    : extractProduct(text, options?.productHint, pageTexts)
 
   const notes: string[] = []
   if (options?.docKind === 'po' && detectPoNumberOnly(text, poNumber)) {
@@ -818,12 +900,12 @@ export function extractFieldsFromText(
   }
 
   return {
-    customerName: extractAfterLabels(text, ['Customer', 'Customer Name', 'Bill To', 'Sold To', 'Account Name']),
+    customerName: extractCustomerName(text, pageTexts, options?.accountNameHint),
     endUserName: extractAfterLabels(text, ['End User', 'End-User', 'End Customer', 'End User Name']),
     resellerName: extractAfterLabels(text, ['Reseller', 'Partner', 'Channel Partner']),
     address: null,
     product,
-    supportPlan: extractSupportPlan(text),
+    supportPlan: extractSupportPlan(text, options?.supportPlanHint, pageTexts),
     quantity: extractQuantity(text, pageTexts, notes, options?.quantityHint, options?.expectedTotal),
     renewalDate: dates.renewal,
     expiryDate: dates.expiry,
@@ -836,6 +918,55 @@ export function extractFieldsFromText(
     signerName: signature.signerName,
     signedDate: signature.signedDate,
     notes,
+  }
+}
+
+export type QuoteFieldHints = {
+  accountName?: string | null
+  product?: string | null
+  supportPlan?: string | null
+  renewalDate?: string | null
+  expiryDate?: string | null
+}
+
+/** Prefer unsigned / Salesforce values when signed PDF extraction is clearly wrong. */
+export function sanitizeQuoteFields(
+  fields: ExtractedDocumentFields,
+  unsignedFields: ExtractedDocumentFields | null,
+  hints: QuoteFieldHints,
+): ExtractedDocumentFields {
+  function pick(
+    extracted: string | null,
+    unsigned: string | null | undefined,
+    hint: string | null | undefined,
+    isPlausible: (v: string) => boolean,
+  ): string | null {
+    if (extracted && isPlausible(extracted)) {
+      if (unsigned && isPlausible(unsigned) && !valuesAlign(extracted, unsigned)) return unsigned
+      return extracted
+    }
+    if (unsigned && isPlausible(unsigned)) return unsigned
+    if (hint && isPlausible(hint)) return hint
+    return null
+  }
+
+  const paymentTerms = (() => {
+    if (fields.paymentTerms && isPlausiblePaymentTerms(fields.paymentTerms)) return fields.paymentTerms
+    if (unsignedFields?.paymentTerms && isPlausiblePaymentTerms(unsignedFields.paymentTerms)) {
+      return unsignedFields.paymentTerms
+    }
+    return null
+  })()
+
+  return {
+    ...fields,
+    product: pick(fields.product, unsignedFields?.product, hints.product ?? null, isPlausibleProductName),
+    customerName: pick(fields.customerName, unsignedFields?.customerName, hints.accountName ?? null, isPlausiblePartyName),
+    endUserName: pick(fields.endUserName, unsignedFields?.endUserName, hints.accountName ?? null, isPlausiblePartyName),
+    supportPlan: pick(fields.supportPlan, unsignedFields?.supportPlan, hints.supportPlan ?? null, isPlausibleSupportPlan),
+    paymentTerms,
+    renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
+    expiryDate: fields.expiryDate ?? unsignedFields?.expiryDate ?? hints.expiryDate ?? null,
   }
 }
 
@@ -852,6 +983,8 @@ export function parseDocumentText(
     termHint?: string | number | null
     quoteNumberHint?: string | null
     quantityHint?: string | number | null
+    accountNameHint?: string | null
+    supportPlanHint?: string | null
     renewalDateHint?: string | null
     expiryDateHint?: string | null
   },
@@ -866,6 +999,8 @@ export function parseDocumentText(
     titleHint: meta.title,
     quoteNumberHint: meta.quoteNumberHint,
     quantityHint: meta.quantityHint,
+    accountNameHint: meta.accountNameHint,
+    supportPlanHint: meta.supportPlanHint,
     renewalDateHint: meta.renewalDateHint,
     expiryDateHint: meta.expiryDateHint,
     pageTexts,

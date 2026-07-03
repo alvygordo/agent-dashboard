@@ -4,6 +4,7 @@ import {
   datesAlign,
   formatFieldValue,
   paymentTermsAlign,
+  sanitizeQuoteFields,
   type ParsedDocument,
   termDurationMonths,
   termsAlign,
@@ -682,14 +683,26 @@ export function buildDocumentAnalysis(
   poProvided: boolean,
   mode: QuoteReviewMode = 'quote-signed-manual',
 ): DocumentAnalysisBundle {
+  const fieldHints = {
+    accountName: sf.accountName,
+    product: sf.product,
+    supportPlan: sf.supportPlan,
+    renewalDate: sf.renewalDate,
+    expiryDate: sf.expiryDate,
+  }
+
+  const signedForAnalysis = signed
+    ? { ...signed, fields: sanitizeQuoteFields(signed.fields, unsigned?.fields ?? null, fieldHints) }
+    : null
+
   const u = unsigned?.fields ?? null
-  const s = signed?.fields ?? null
+  const s = signedForAnalysis?.fields ?? null
   const p = po?.fields ?? null
 
   const quoteBaselineFields = mode === 'po-received' ? u : s
   const quoteBaselineLabel = mode === 'po-received' ? 'unsigned quote' : 'signed quote'
-  const alignmentQuoteDoc = mode === 'po-received' ? unsigned : signed
-  const tcQuoteDoc = mode === 'po-received' ? unsigned : signed
+  const alignmentQuoteDoc = mode === 'po-received' ? unsigned : signedForAnalysis
+  const tcQuoteDoc = mode === 'po-received' ? unsigned : signedForAnalysis
 
   const unsignedPages = unsigned?.pageCount ?? null
   const signedPages = signed?.pageCount ?? null
@@ -715,7 +728,7 @@ export function buildDocumentAnalysis(
         })
       }
     }
-    quoteChecks.push(signedSignatureCheck(signed))
+    quoteChecks.push(signedSignatureCheck(signedForAnalysis))
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
     const quotePending = quoteChecks.some((c) => c.severity === 'pending')
     quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
@@ -738,7 +751,7 @@ export function buildDocumentAnalysis(
     quoteSummary =
       'PO Received — customer did not sign the quote. Compare unsigned quote to PO in the Purchase order section.'
   } else {
-    quoteChecks = buildUnsignedSignedChecks(sf, unsigned, signed, errors)
+    quoteChecks = buildUnsignedSignedChecks(sf, unsigned, signedForAnalysis, errors)
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
     const quotePending = quoteChecks.some((c) => c.severity === 'pending')
     quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
@@ -882,7 +895,7 @@ export function buildDocumentAnalysis(
       poReferencesQuoteDetail: quoteRef.detail,
     },
     unsigned,
-    signed,
+    signed: signedForAnalysis,
     purchaseOrder: po,
     errors,
     quoteComparison: {

@@ -56,6 +56,8 @@ async function analyzeUrl(
       termHint: extractOptions?.termHint,
       quoteNumberHint: extractOptions?.quoteNumberHint,
       quantityHint: extractOptions?.quantityHint,
+      accountNameHint: extractOptions?.accountNameHint,
+      supportPlanHint: extractOptions?.supportPlanHint,
       renewalDateHint: extractOptions?.renewalDateHint,
       expiryDateHint: extractOptions?.expiryDateHint,
     })
@@ -111,6 +113,8 @@ export async function POST(req: NextRequest) {
       ? `$${body.salesforce.currentArr.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
       : null
     const quantityHint = body.salesforce.userCount
+    const accountNameHint = body.salesforce.accountName
+    const supportPlanHint = body.salesforce.supportPlan
 
     const unsignedResult = needsUnsigned && body.unsignedQuoteUrl?.trim()
       ? await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', {
@@ -119,15 +123,19 @@ export async function POST(req: NextRequest) {
           termHint,
           quoteNumberHint: body.salesforce.primaryQuoteNumber ?? null,
           quantityHint,
+          accountNameHint,
+          supportPlanHint,
           expectedTotal: arrHint,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })
       : { doc: null, error: null }
 
+    const signedProductHint = unsignedResult.doc?.fields.product ?? productHint
+
     const signedResult = needsSigned && body.signedQuoteUrl?.trim()
       ? await analyzeUrl(conn, body.signedQuoteUrl, 'quote', {
-          productHint,
+          productHint: signedProductHint,
           docKind: 'quote',
           termHint,
           expectedTotal: unsignedResult.doc?.fields.totalAmount ?? arrHint,
@@ -136,6 +144,8 @@ export async function POST(req: NextRequest) {
             ?? body.salesforce.primaryQuoteNumber
             ?? null,
           quantityHint,
+          accountNameHint,
+          supportPlanHint,
           renewalDateHint: body.salesforce.renewalDate,
           expiryDateHint: body.salesforce.expiryDate,
         })
