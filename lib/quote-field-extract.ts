@@ -349,6 +349,80 @@ function extractAllLabeledFlexibleDates(text: string, labels: string[]): string[
   return results
 }
 
+function extractDateOnNextLine(text: string, label: string): string | null {
+  const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const re = new RegExp(
+    `${escaped}\\s*:?(?:\\s+|\\n+)(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+    'i',
+  )
+  const m = text.match(re)
+  return m ? parseFlexibleDate(m[1]) : null
+}
+
+/** CPQ term block: labels + dates on one row, or label/date on consecutive lines. */
+function extractTermBlockDates(
+  text: string,
+): { renewal: string | null; expiry: string | null; term: string | null } {
+  const inlineRow = text.match(
+    /Term\s+Start\s+Date\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})\s+Term\s+End\s+Date\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})/i,
+  )
+  if (inlineRow) {
+    const termM = text.match(/Term\s+Duration\s+(\d+\s*months?)/i)
+    return {
+      renewal: parseFlexibleDate(inlineRow[1]),
+      expiry: parseFlexibleDate(inlineRow[2]),
+      term: termM?.[1] ?? null,
+    }
+  }
+
+  const tableRow = text.match(
+    /Term\s+Start\s+Date\s+Term\s+End\s+Date\s+Term\s+Duration[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})(?:\s+(\d+\s*months?))?/i,
+  )
+  if (tableRow) {
+    return {
+      renewal: parseFlexibleDate(tableRow[1]),
+      expiry: parseFlexibleDate(tableRow[2]),
+      term: tableRow[3] ?? null,
+    }
+  }
+
+  const renewal = extractDateOnNextLine(text, 'Term Start Date')
+    ?? extractDateOnNextLine(text, 'Term start date')
+  const expiry = extractDateOnNextLine(text, 'Term End Date')
+    ?? extractDateOnNextLine(text, 'Term end date')
+  const termM = text.match(/Term\s+Duration\s*:?\s*(\d+\s*months?)/i)
+
+  if (renewal || expiry) {
+    return { renewal, expiry, term: termM?.[1] ?? null }
+  }
+
+  return { renewal: null, expiry: null, term: null }
+}
+
+export function finalizeQuoteDocumentFields(
+  fields: ExtractedDocumentFields,
+): ExtractedDocumentFields {
+  const renewalDate = fields.renewalDate
+  const term = fields.term
+  const months = termDurationMonths(term)
+
+  let expiryDate = resolveQuoteExpiryDate({
+    renewalDate,
+    extractedExpiry: fields.expiryDate,
+    term,
+  })
+
+  if (renewalDate && months && months > 0) {
+    const e = expiryDate ? normalizeDateForCompare(expiryDate) : null
+    const r = normalizeDateForCompare(renewalDate)
+    if (!e || (r && e === r)) {
+      expiryDate = formatStoredDate(computeExpiryFromRenewalAndTerm(renewalDate, months))
+    }
+  }
+
+  return { ...fields, renewalDate, expiryDate: expiryDate ?? fields.expiryDate }
+}
+
 function pickBestExpiryDate(candidates: string[], renewal: string | null): string | null {
   const normalized = candidates
     .map((raw) => ({ raw, norm: normalizeDateForCompare(raw) }))
@@ -373,8 +447,10 @@ function extractDates(
   renewalDateHint?: string | null,
 ): { renewal: string | null; expiry: string | null } {
   const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
+  const fullScope = pageTexts?.join('\n') ?? text
+  const termBlock = extractTermBlockDates(fullScope)
 
-  let renewal = extractLabeledFlexibleDate(headerScope, [
+  let renewal = termBlock.renewal ?? extractLabeledFlexibleDate(headerScope, [
     'Term Start Date', 'Term start date', 'Renewal Date', 'Renewal date',
     'Subscription Start Date', 'Start Date', 'Service Start Date', 'Effective Date',
   ])
@@ -388,7 +464,7 @@ function extractDates(
     'Expiry Date', 'Expiration Date', 'Contract End Date', 'Contract End',
   ]
 
-  let expiry = extractLabeledFlexibleDate(headerScope, primaryTermEndLabels)
+  let expiry = termBlock.expiry ?? extractLabeledFlexibleDate(headerScope, primaryTermEndLabels)
     ?? pickBestExpiryDate(
       extractAllLabeledFlexibleDates(headerScope, [...primaryTermEndLabels, ...secondaryTermEndLabels]),
       renewal,
@@ -1009,6 +1085,8 @@ export function extractFieldsFromText(
   options?: ExtractOptions,
 ): ExtractedDocumentFields {
   const pageTexts = options?.pageTexts
+  const fullScope = pageTexts?.join('\n') ?? text
+  const termBlock = extractTermBlockDates(fullScope)
   const dates = extractDates(text, pageTexts, options?.renewalDateHint)
   const poNumber = firstMatch(text, /\bPO\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
     ?? firstMatch(text, /\bPurchase\s*Order\s*(?:#|Number|No\.?)?\s*:?\s*([A-Z0-9][\w-]{2,30})/i)
@@ -1036,16 +1114,9 @@ export function extractFieldsFromText(
     notes.push('Very little text extracted — document may be scanned/image-only.')
   }
 
-  const term = extractTerm(text, options?.termHint, pageTexts)
+  const term = termBlock.term ?? extractTerm(text, options?.termHint, pageTexts)
   const renewalDate = dates.renewal ?? options?.renewalDateHint ?? null
-  const expiryDate = resolveQuoteExpiryDate({
-    renewalDate,
-    extractedExpiry: dates.expiry,
-    alternateExpiry: options?.docKind === 'quote' ? undefined : options?.expiryDateHint,
-    term,
-  })
-
-  return {
+  const rawFields = {
     customerName: extractCustomerName(text, pageTexts, options?.accountNameHint),
     endUserName: extractAfterLabels(text, ['End User', 'End-User', 'End Customer', 'End User Name']),
     resellerName: extractAfterLabels(text, ['Reseller', 'Partner', 'Channel Partner']),
@@ -1054,7 +1125,7 @@ export function extractFieldsFromText(
     supportPlan: extractSupportPlan(text, options?.supportPlanHint, pageTexts),
     quantity: extractQuantity(text, pageTexts, notes, options?.quantityHint, options?.expectedTotal),
     renewalDate,
-    expiryDate,
+    expiryDate: dates.expiry,
     supplierName: extractSupplier(text, options?.mirrorSupplier, pageTexts),
     paymentTerms: extractPaymentTerms(text, pageTexts, options?.docKind),
     quoteNumber,
@@ -1064,7 +1135,9 @@ export function extractFieldsFromText(
     signerName: signature.signerName,
     signedDate: signature.signedDate,
     notes,
-  }
+  } as ExtractedDocumentFields
+
+  return finalizeQuoteDocumentFields(rawFields)
 }
 
 export type QuoteFieldHints = {
@@ -1104,7 +1177,7 @@ export function sanitizeQuoteFields(
     return null
   })()
 
-  return {
+  return finalizeQuoteDocumentFields({
     ...fields,
     product: pick(fields.product, unsignedFields?.product, hints.product ?? null, isPlausibleProductName),
     customerName: pick(fields.customerName, unsignedFields?.customerName, hints.accountName ?? null, isPlausiblePartyName),
@@ -1112,13 +1185,9 @@ export function sanitizeQuoteFields(
     supportPlan: pick(fields.supportPlan, unsignedFields?.supportPlan, hints.supportPlan ?? null, isPlausibleSupportPlan),
     paymentTerms,
     renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
-    expiryDate: resolveQuoteExpiryDate({
-      renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
-      extractedExpiry: fields.expiryDate,
-      alternateExpiry: unsignedFields?.expiryDate,
-      term: fields.term ?? unsignedFields?.term ?? null,
-    }),
-  }
+    expiryDate: fields.expiryDate ?? unsignedFields?.expiryDate ?? null,
+    term: fields.term ?? unsignedFields?.term ?? null,
+  })
 }
 
 export function parseDocumentText(

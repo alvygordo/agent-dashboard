@@ -18,7 +18,7 @@ import {
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { resolveQuoteNumber } from "@/lib/quote-alignment"
-import { resolveQuoteExpiryDate, formatQuoteDateDisplay } from "@/lib/quote-field-extract"
+import { resolveQuoteExpiryDate, formatQuoteDateDisplay, finalizeQuoteDocumentFields } from "@/lib/quote-field-extract"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
 import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
@@ -144,7 +144,10 @@ function buildProvisioningTemplate(
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
   const unsignedFirst = usesUnsignedTemplateFields(opp, docAnalysis)
-  const quoteFields = quoteFieldsForTemplate(docAnalysis)
+  const quoteFieldsRaw = quoteFieldsForTemplate(docAnalysis)
+  const quoteFields = quoteFieldsRaw
+    ? finalizeQuoteDocumentFields(quoteFieldsRaw)
+    : null
   const signedFields = docAnalysis?.signed?.fields ?? null
   const unsignedFields = docAnalysis?.unsigned?.fields ?? null
   const termSource =
@@ -159,17 +162,18 @@ function buildProvisioningTemplate(
   const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
   const renewalRaw = unsignedFirst
-    ? (unsignedFields?.renewalDate ?? quoteFields?.renewalDate ?? opp.renewalDate)
+    ? (quoteFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
     : (signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
   const renewal = formatQuoteDateDisplay(renewalRaw ?? opp.renewalDate)
-  const expiryResolved = resolveQuoteExpiryDate({
-    renewalDate: renewalRaw,
-    extractedExpiry: unsignedFirst
-      ? (unsignedFields?.expiryDate ?? quoteFields?.expiryDate)
-      : (signedFields?.expiryDate ?? quoteFields?.expiryDate),
-    alternateExpiry: unsignedFirst ? undefined : unsignedFields?.expiryDate,
-    term: termSource,
-  })
+  const expiryResolved = quoteFields?.expiryDate
+    ?? resolveQuoteExpiryDate({
+      renewalDate: renewalRaw,
+      extractedExpiry: unsignedFirst
+        ? (unsignedFields?.expiryDate ?? quoteFields?.expiryDate)
+        : (signedFields?.expiryDate ?? quoteFields?.expiryDate),
+      alternateExpiry: unsignedFirst ? undefined : unsignedFields?.expiryDate,
+      term: termSource,
+    })
   const expiry = expiryResolved ? formatQuoteDateDisplay(expiryResolved) : "[Insert MM/DD/YYYY]"
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
   const endUser = opp.accountName ?? "[Insert End User Name]"

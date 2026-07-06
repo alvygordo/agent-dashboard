@@ -3,6 +3,7 @@ import { usesUnsignedQuoteBaseline, type QuoteReviewMode } from '@/lib/quote-rev
 import {
   datesAlign,
   formatFieldValue,
+  formatQuoteDateDisplay,
   paymentTermsAlign,
   sanitizeQuoteFields,
   type ParsedDocument,
@@ -165,13 +166,20 @@ function compareAlignment(
   return 'unknown'
 }
 
+function formatAlignmentDate(value: string | null | undefined): string {
+  if (!value?.trim()) return '—'
+  return formatQuoteDateDisplay(value)
+}
+
 function buildAlignmentRows(
   sf: SfAlignmentInput,
   signed: ParsedDocument | null,
   po: ParsedDocument | null,
   poProvided: boolean,
   errors: { doc: string; message: string }[] = [],
+  options: { quoteVsSalesforce?: boolean } = {},
 ): AlignmentRow[] {
+  const quoteVsSf = options.quoteVsSalesforce ?? false
   const sfFields = signedFieldsFromSf(sf)
   const sq = signed?.fields ?? null
   const poFields = po?.fields ?? null
@@ -224,15 +232,15 @@ function buildAlignmentRows(
     },
     {
       field: 'Term duration',
-      mode: 'signed-po',
-      sf: '—',
+      mode: quoteVsSf ? 'sf-signed' : 'signed-po',
+      sf: sfTermLabel(sf),
       signed: sq?.term ?? null,
       po: poFields?.term ?? null,
-      sfDisplay: '—',
+      sfDisplay: sfTermLabel(sf) ?? '—',
     },
     {
       field: 'Service provider / supplier',
-      mode: 'signed-po',
+      mode: quoteVsSf ? 'sf-signed' : 'signed-po',
       sf: '—',
       signed: sq?.supplierName ?? null,
       po: poFields?.supplierName ?? null,
@@ -240,7 +248,7 @@ function buildAlignmentRows(
     },
     {
       field: 'Payment terms',
-      mode: 'signed-po',
+      mode: quoteVsSf ? 'sf-signed' : 'signed-po',
       sf: '—',
       signed: sq?.paymentTerms ?? null,
       po: poFields?.paymentTerms ?? null,
@@ -254,25 +262,48 @@ function buildAlignmentRows(
     let status: AlignmentStatus
 
     if (spec.field === 'Payment terms') {
-      if (!sq?.paymentTerms && !poFields?.paymentTerms) status = 'unknown'
+      if (quoteVsSf) {
+        status = sq?.paymentTerms ? 'partial' : 'unknown'
+      } else if (!sq?.paymentTerms && !poFields?.paymentTerms) status = 'unknown'
       else if (!sq?.paymentTerms || !poFields?.paymentTerms) status = 'unknown'
       else status = paymentTermsAlign(sq.paymentTerms, poFields.paymentTerms) ? 'aligned' : 'mismatch'
     } else if (spec.field === 'Service provider / supplier') {
-      status = compareAlignment('signed-po', null, sq?.supplierName ?? null, poFields?.supplierName ?? null, poProvided)
+      status = quoteVsSf
+        ? (sq?.supplierName ? 'partial' : 'unknown')
+        : compareAlignment('signed-po', null, sq?.supplierName ?? null, poFields?.supplierName ?? null, poProvided)
     } else if (spec.field === 'Renewal date (term start)') {
-      status = !sq?.renewalDate && !poFields?.renewalDate
-        ? 'unknown'
-        : !sq?.renewalDate || !poFields?.renewalDate
+      if (quoteVsSf) {
+        status = !sq?.renewalDate
           ? 'unknown'
-          : datesAlign(sq.renewalDate, poFields.renewalDate) ? 'aligned' : 'mismatch'
+          : datesAlign(sq.renewalDate, sf.renewalDate) ? 'aligned' : 'mismatch'
+      } else {
+        status = !sq?.renewalDate && !poFields?.renewalDate
+          ? 'unknown'
+          : !sq?.renewalDate || !poFields?.renewalDate
+            ? 'unknown'
+            : datesAlign(sq.renewalDate, poFields.renewalDate) ? 'aligned' : 'mismatch'
+      }
     } else if (spec.field === 'Expiry date (term end)') {
-      status = !sq?.expiryDate && !poFields?.expiryDate
-        ? 'unknown'
-        : !sq?.expiryDate || !poFields?.expiryDate
+      if (quoteVsSf) {
+        status = !sq?.expiryDate || !sq?.renewalDate
           ? 'unknown'
-          : datesAlign(sq.expiryDate, poFields.expiryDate) ? 'aligned' : 'mismatch'
+          : datesAlign(sq.expiryDate, sq.renewalDate)
+            ? 'mismatch'
+            : 'aligned'
+      } else {
+        status = !sq?.expiryDate && !poFields?.expiryDate
+          ? 'unknown'
+          : !sq?.expiryDate || !poFields?.expiryDate
+            ? 'unknown'
+            : datesAlign(sq.expiryDate, poFields.expiryDate) ? 'aligned' : 'mismatch'
+      }
     } else if (spec.field === 'Term duration') {
-      if (!sq?.term && !poFields?.term) status = 'unknown'
+      if (quoteVsSf) {
+        const sfTerm = sfTermLabel(sf)
+        status = !sq?.term
+          ? 'unknown'
+          : sfTerm && termsAlign(sq.term, sfTerm) ? 'aligned' : 'partial'
+      } else if (!sq?.term && !poFields?.term) status = 'unknown'
       else if (!sq?.term || !poFields?.term) status = 'unknown'
       else status = termsAlign(sq.term, poFields.term) ? 'aligned' : 'mismatch'
     } else {
@@ -281,7 +312,7 @@ function buildAlignmentRows(
 
     const signedDisplay = spec.signedDisplay ?? (signedVal
       ? (spec.field.includes('date') || spec.field.includes('term end')
-        ? formatUsDate(signedVal)
+        ? formatAlignmentDate(signedVal)
         : formatFieldValue(signedVal))
       : signedFailed ? 'Not extracted (download failed)' : '—')
 
@@ -289,7 +320,7 @@ function buildAlignmentRows(
       ? 'N/A'
       : poVal
         ? (spec.field.includes('date') || spec.field.includes('term end')
-          ? formatUsDate(poVal)
+          ? formatAlignmentDate(poVal)
           : formatFieldValue(poVal))
         : poFailed ? 'Not extracted (download failed)' : '—')
 
@@ -870,7 +901,9 @@ export function buildDocumentAnalysis(
     if (tc.level === 'possible_conflict' && poOverall === 'pass') poOverall = 'warn'
   }
 
-  const alignmentRows = buildAlignmentRows(sf, alignmentQuoteDoc, po, poProvided, errors)
+  const alignmentRows = buildAlignmentRows(sf, alignmentQuoteDoc, po, poProvided, errors, {
+    quoteVsSalesforce: mode === 'auto-renew' || (usesUnsignedQuoteBaseline(mode) && !poProvided),
+  })
   const dataStatuses = alignmentRows.map((r) => r.status)
   const alignmentOverall = severityFromStatuses(dataStatuses)
   const alignedCount = alignmentRows.filter((r) => r.status === 'aligned').length
