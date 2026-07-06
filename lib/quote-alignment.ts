@@ -2,9 +2,11 @@ import type { AnalysisFlag, AnalysisSeverity } from '@/lib/quote-review-analysis
 import { usesUnsignedQuoteBaseline, type QuoteReviewMode } from '@/lib/quote-review-mode'
 import {
   datesAlign,
+  finalizeQuoteDocumentFields,
   formatFieldValue,
   formatQuoteDateDisplay,
   paymentTermsAlign,
+  resolveProvisioningDates,
   sanitizeQuoteFields,
   type ParsedDocument,
   termDurationMonths,
@@ -171,6 +173,12 @@ function formatAlignmentDate(value: string | null | undefined): string {
   return formatQuoteDateDisplay(value)
 }
 
+function enrichQuoteDocument(doc: ParsedDocument | null): ParsedDocument | null {
+  if (!doc) return null
+  const fullText = doc.pageTexts.length > 0 ? doc.pageTexts.join('\n') : null
+  return { ...doc, fields: finalizeQuoteDocumentFields(doc.fields, fullText) }
+}
+
 function buildAlignmentRows(
   sf: SfAlignmentInput,
   signed: ParsedDocument | null,
@@ -236,7 +244,9 @@ function buildAlignmentRows(
       sf: sfTermLabel(sf),
       signed: sq?.term ?? null,
       po: poFields?.term ?? null,
-      sfDisplay: sfTermLabel(sf) ?? '—',
+      sfDisplay: quoteVsSf && sfTermLabel(sf)
+        ? `${sfTermLabel(sf)} (current subscription)`
+        : (sfTermLabel(sf) ?? '—'),
     },
     {
       field: 'Service provider / supplier',
@@ -273,9 +283,12 @@ function buildAlignmentRows(
         : compareAlignment('signed-po', null, sq?.supplierName ?? null, poFields?.supplierName ?? null, poProvided)
     } else if (spec.field === 'Renewal date (term start)') {
       if (quoteVsSf) {
+        const sfRenewalCandidates = [sf.renewalDate, sfFields.renewalDate].filter(Boolean)
         status = !sq?.renewalDate
           ? 'unknown'
-          : datesAlign(sq.renewalDate, sf.renewalDate) ? 'aligned' : 'mismatch'
+          : sfRenewalCandidates.some((d) => datesAlign(sq.renewalDate, d))
+            ? 'aligned'
+            : 'mismatch'
       } else {
         status = !sq?.renewalDate && !poFields?.renewalDate
           ? 'unknown'
@@ -285,11 +298,16 @@ function buildAlignmentRows(
       }
     } else if (spec.field === 'Expiry date (term end)') {
       if (quoteVsSf) {
-        status = !sq?.expiryDate || !sq?.renewalDate
+        const expected = sq?.renewalDate
+          ? resolveProvisioningDates({
+            renewalDate: sq.renewalDate,
+            extractedExpiry: sq.expiryDate,
+            term: sq.term,
+          }).expiryDate
+          : null
+        status = !sq?.expiryDate || !expected
           ? 'unknown'
-          : datesAlign(sq.expiryDate, sq.renewalDate)
-            ? 'mismatch'
-            : 'aligned'
+          : datesAlign(sq.expiryDate, expected) ? 'aligned' : 'mismatch'
       } else {
         status = !sq?.expiryDate && !poFields?.expiryDate
           ? 'unknown'
@@ -299,10 +317,7 @@ function buildAlignmentRows(
       }
     } else if (spec.field === 'Term duration') {
       if (quoteVsSf) {
-        const sfTerm = sfTermLabel(sf)
-        status = !sq?.term
-          ? 'unknown'
-          : sfTerm && termsAlign(sq.term, sfTerm) ? 'aligned' : 'partial'
+        status = sq?.term ? 'aligned' : 'unknown'
       } else if (!sq?.term && !poFields?.term) status = 'unknown'
       else if (!sq?.term || !poFields?.term) status = 'unknown'
       else status = termsAlign(sq.term, poFields.term) ? 'aligned' : 'mismatch'
@@ -730,14 +745,15 @@ export function buildDocumentAnalysis(
     ? { ...signed, fields: sanitizeQuoteFields(signed.fields, unsigned?.fields ?? null, fieldHints) }
     : null
 
-  const u = unsigned?.fields ?? null
+  const unsignedForAnalysis = enrichQuoteDocument(unsigned)
+  const u = unsignedForAnalysis?.fields ?? null
   const s = signedForAnalysis?.fields ?? null
   const p = po?.fields ?? null
 
   const quoteBaselineFields = usesUnsignedQuoteBaseline(mode) ? u : s
   const quoteBaselineLabel = usesUnsignedQuoteBaseline(mode) ? 'unsigned quote' : 'signed quote'
-  const alignmentQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsigned : signedForAnalysis
-  const tcQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsigned : signedForAnalysis
+  const alignmentQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsignedForAnalysis : signedForAnalysis
+  const tcQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsignedForAnalysis : signedForAnalysis
 
   const unsignedPages = unsigned?.pageCount ?? null
   const signedPages = signed?.pageCount ?? null

@@ -108,7 +108,7 @@ function isPlausibleDate(value: string): boolean {
 /** Normalize any extracted date to YYYY-MM-DD for comparison. */
 export function normalizeDateForCompare(value: string | null | undefined): string | null {
   if (!value?.trim()) return null
-  const v = value.trim()
+  const v = value.trim().replace(/[\u2010-\u2015]/g, '-')
 
   const iso = v.match(/^(\d{4})-(\d{2})-(\d{2})/)
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
@@ -386,6 +386,17 @@ function extractTermBlockDates(
     }
   }
 
+  const stackedRow = text.match(
+    /Term\s+Start\s+Date[\s\S]{0,60}?Term\s+End\s+Date[\s\S]{0,60}?Term\s+Duration[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})[\s\n]+(\d+\s*months?)/i,
+  )
+  if (stackedRow) {
+    return {
+      renewal: parseFlexibleDate(stackedRow[1]),
+      expiry: parseFlexibleDate(stackedRow[2]),
+      term: stackedRow[3] ?? null,
+    }
+  }
+
   const renewal = extractDateOnNextLine(text, 'Term Start Date')
     ?? extractDateOnNextLine(text, 'Term start date')
   const expiry = extractDateOnNextLine(text, 'Term End Date')
@@ -399,28 +410,89 @@ function extractTermBlockDates(
   return { renewal: null, expiry: null, term: null }
 }
 
-export function finalizeQuoteDocumentFields(
-  fields: ExtractedDocumentFields,
-): ExtractedDocumentFields {
-  const renewalDate = fields.renewalDate
-  const term = fields.term
+/** Latest DD-Mon-YYYY (or similar) in text strictly after the renewal / term-start date. */
+function extractLatestDateAfterRenewal(text: string, renewal: string | null): string | null {
+  const rNorm = renewal ? normalizeDateForCompare(renewal) : null
+  if (!rNorm) return null
+
+  let best: string | null = null
+  let bestNorm: string | null = null
+
+  const patterns = [
+    /\b(\d{1,2})[-/\u2010-\u2015\s]([A-Za-z]{3,9})[-/\u2010-\u2015\s](\d{4})\b/gi,
+    /\b(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})\b/g,
+  ]
+
+  for (const pattern of patterns) {
+    for (const m of text.matchAll(pattern)) {
+      const parsed = pattern === patterns[0]
+        ? parseFlexibleDate(`${m[1]}-${m[2]}-${m[3]}`)
+        : parseFlexibleDate(m[0])
+      if (!parsed) continue
+      const n = normalizeDateForCompare(parsed)
+      if (n && n > rNorm && (!bestNorm || n > bestNorm)) {
+        best = parsed
+        bestNorm = n
+      }
+    }
+  }
+
+  return best
+}
+
+export function resolveProvisioningDates(input: {
+  renewalDate: string | null | undefined
+  extractedExpiry?: string | null | undefined
+  term: string | number | null | undefined
+}): { renewalDate: string | null; expiryDate: string | null } {
+  const renewalDate = input.renewalDate?.trim() ?? null
+  const term = input.term
   const months = termDurationMonths(term)
 
   let expiryDate = resolveQuoteExpiryDate({
     renewalDate,
-    extractedExpiry: fields.expiryDate,
+    extractedExpiry: input.extractedExpiry,
     term,
   })
 
   if (renewalDate && months && months > 0) {
-    const e = expiryDate ? normalizeDateForCompare(expiryDate) : null
     const r = normalizeDateForCompare(renewalDate)
-    if (!e || (r && e === r)) {
+    const e = expiryDate ? normalizeDateForCompare(expiryDate) : null
+    if (!e || (r && e <= r)) {
       expiryDate = formatStoredDate(computeExpiryFromRenewalAndTerm(renewalDate, months))
     }
   }
 
-  return { ...fields, renewalDate, expiryDate: expiryDate ?? fields.expiryDate }
+  return { renewalDate, expiryDate }
+}
+
+export function finalizeQuoteDocumentFields(
+  fields: ExtractedDocumentFields,
+  fullText?: string | null,
+): ExtractedDocumentFields {
+  const renewalDate = fields.renewalDate
+  const term = fields.term
+
+  let extractedExpiry = fields.expiryDate
+  if (
+    fullText
+    && renewalDate
+    && (!extractedExpiry || datesAlign(extractedExpiry, renewalDate))
+  ) {
+    extractedExpiry = extractLatestDateAfterRenewal(fullText, renewalDate) ?? extractedExpiry
+  }
+
+  const resolved = resolveProvisioningDates({
+    renewalDate,
+    extractedExpiry,
+    term,
+  })
+
+  return {
+    ...fields,
+    renewalDate: resolved.renewalDate,
+    expiryDate: resolved.expiryDate ?? fields.expiryDate,
+  }
 }
 
 function pickBestExpiryDate(candidates: string[], renewal: string | null): string | null {
@@ -482,6 +554,10 @@ function extractDates(
         extractAllLabeledFlexibleDates(text, [...primaryTermEndLabels, ...secondaryTermEndLabels]),
         renewal,
       )
+  }
+
+  if (renewal && (!expiry || datesAlign(expiry, renewal))) {
+    expiry = extractLatestDateAfterRenewal(fullScope, renewal) ?? expiry
   }
 
   return { renewal, expiry }
@@ -1137,7 +1213,7 @@ export function extractFieldsFromText(
     notes,
   } as ExtractedDocumentFields
 
-  return finalizeQuoteDocumentFields(rawFields)
+  return finalizeQuoteDocumentFields(rawFields, text)
 }
 
 export type QuoteFieldHints = {

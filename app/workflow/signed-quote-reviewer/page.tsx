@@ -18,7 +18,7 @@ import {
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { resolveQuoteNumber } from "@/lib/quote-alignment"
-import { resolveQuoteExpiryDate, formatQuoteDateDisplay, finalizeQuoteDocumentFields } from "@/lib/quote-field-extract"
+import { formatQuoteDateDisplay, resolveProvisioningDates } from "@/lib/quote-field-extract"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
 import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
@@ -144,10 +144,7 @@ function buildProvisioningTemplate(
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
   const unsignedFirst = usesUnsignedTemplateFields(opp, docAnalysis)
-  const quoteFieldsRaw = quoteFieldsForTemplate(docAnalysis)
-  const quoteFields = quoteFieldsRaw
-    ? finalizeQuoteDocumentFields(quoteFieldsRaw)
-    : null
+  const quoteFields = quoteFieldsForTemplate(docAnalysis)
   const signedFields = docAnalysis?.signed?.fields ?? null
   const unsignedFields = docAnalysis?.unsigned?.fields ?? null
   const termSource =
@@ -164,17 +161,13 @@ function buildProvisioningTemplate(
   const renewalRaw = unsignedFirst
     ? (quoteFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
     : (signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
-  const renewal = formatQuoteDateDisplay(renewalRaw ?? opp.renewalDate)
-  const expiryResolved = quoteFields?.expiryDate
-    ?? resolveQuoteExpiryDate({
-      renewalDate: renewalRaw,
-      extractedExpiry: unsignedFirst
-        ? (unsignedFields?.expiryDate ?? quoteFields?.expiryDate)
-        : (signedFields?.expiryDate ?? quoteFields?.expiryDate),
-      alternateExpiry: unsignedFirst ? undefined : unsignedFields?.expiryDate,
-      term: termSource,
-    })
-  const expiry = expiryResolved ? formatQuoteDateDisplay(expiryResolved) : "[Insert MM/DD/YYYY]"
+  const provisioned = resolveProvisioningDates({
+    renewalDate: renewalRaw,
+    extractedExpiry: quoteFields?.expiryDate ?? unsignedFields?.expiryDate ?? signedFields?.expiryDate,
+    term: termSource,
+  })
+  const renewal = formatQuoteDateDisplay(provisioned.renewalDate ?? renewalRaw ?? opp.renewalDate)
+  const expiry = formatQuoteDateDisplay(provisioned.expiryDate)
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
