@@ -173,6 +173,11 @@ function formatStoredDate(value: string): string {
   return `${m}/${d}/${y}`
 }
 
+export function formatQuoteDateDisplay(value: string | null | undefined): string {
+  if (!value?.trim()) return '[Insert MM/DD/YYYY]'
+  return formatStoredDate(value)
+}
+
 export function resolveQuoteExpiryDate(args: {
   renewalDate: string | null | undefined
   extractedExpiry: string | null | undefined
@@ -182,11 +187,14 @@ export function resolveQuoteExpiryDate(args: {
   const renewal = args.renewalDate
   const candidates = [args.extractedExpiry, args.alternateExpiry].filter(Boolean) as string[]
 
-  // Accept only a Term End Date on/after the renewal (new term), not Current Term End.
   for (const candidate of candidates) {
-    if (renewal && isExpiryOnOrAfterRenewal(candidate, renewal)) {
-      return formatStoredDate(candidate)
-    }
+    if (!renewal || !isExpiryOnOrAfterRenewal(candidate, renewal)) continue
+    const e = normalizeDateForCompare(candidate)
+    const r = normalizeDateForCompare(renewal)
+    const months = termDurationMonths(args.term)
+    // Same-day as renewal is usually Current Term End or a misread — skip when term > 0.
+    if (e && r && e === r && months != null && months > 0) continue
+    return formatStoredDate(candidate)
   }
 
   const months = termDurationMonths(args.term)
@@ -350,7 +358,7 @@ function pickBestExpiryDate(candidates: string[], renewal: string | null): strin
 
   if (renewal) {
     const r = normalizeDateForCompare(renewal)
-    const afterRenewal = normalized.filter((x) => r && x.norm >= r)
+    const afterRenewal = normalized.filter((x) => r && x.norm > r)
     if (afterRenewal.length > 0) {
       return afterRenewal.sort((a, b) => b.norm.localeCompare(a.norm))[0].raw
     }

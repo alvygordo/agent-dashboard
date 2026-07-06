@@ -18,7 +18,7 @@ import {
 import { buildQuoteReviewAnalysis } from "@/lib/quote-review-analysis"
 import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { resolveQuoteNumber } from "@/lib/quote-alignment"
-import { resolveQuoteExpiryDate } from "@/lib/quote-field-extract"
+import { resolveQuoteExpiryDate, formatQuoteDateDisplay } from "@/lib/quote-field-extract"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
 import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
@@ -127,27 +127,50 @@ function quoteFieldsForTemplate(docAnalysis?: DocumentAnalysisBundle | null) {
   return docAnalysis.signed?.fields ?? docAnalysis.unsigned?.fields ?? null
 }
 
+function usesUnsignedTemplateFields(
+  opp: OppData,
+  docAnalysis?: DocumentAnalysisBundle | null,
+): boolean {
+  return (
+    opp.winType === "Auto-Renew"
+    || opp.winType === "PO Received"
+    || docAnalysis?.analysisMode === "auto-renew"
+    || docAnalysis?.analysisMode === "po-received"
+  )
+}
+
 function buildProvisioningTemplate(
   opp: OppData,
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
+  const unsignedFirst = usesUnsignedTemplateFields(opp, docAnalysis)
+  const quoteFields = quoteFieldsForTemplate(docAnalysis)
   const signedFields = docAnalysis?.signed?.fields ?? null
   const unsignedFields = docAnalysis?.unsigned?.fields ?? null
-  const termSource = signedFields?.term ?? unsignedFields?.term ?? opp.currentTerm
+  const termSource =
+    quoteFields?.term
+    ?? (unsignedFirst ? unsignedFields?.term : signedFields?.term)
+    ?? unsignedFields?.term
+    ?? signedFields?.term
+    ?? opp.currentTerm
   const months = formatTermMonthsOnly(termSource)
   const termLabel = formatTermLabel(termSource)
   const product = opp.product ?? "[Insert Product Name]"
   const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
-  const renewalRaw = signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate
-  const renewal = renewalRaw ? formatUsDate(renewalRaw) : formatUsDate(opp.renewalDate)
+  const renewalRaw = unsignedFirst
+    ? (unsignedFields?.renewalDate ?? quoteFields?.renewalDate ?? opp.renewalDate)
+    : (signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
+  const renewal = formatQuoteDateDisplay(renewalRaw ?? opp.renewalDate)
   const expiryResolved = resolveQuoteExpiryDate({
     renewalDate: renewalRaw,
-    extractedExpiry: signedFields?.expiryDate,
-    alternateExpiry: unsignedFields?.expiryDate,
+    extractedExpiry: unsignedFirst
+      ? (unsignedFields?.expiryDate ?? quoteFields?.expiryDate)
+      : (signedFields?.expiryDate ?? quoteFields?.expiryDate),
+    alternateExpiry: unsignedFirst ? undefined : unsignedFields?.expiryDate,
     term: termSource,
   })
-  const expiry = expiryResolved ? formatUsDate(expiryResolved) : "[Insert MM/DD/YYYY]"
+  const expiry = expiryResolved ? formatQuoteDateDisplay(expiryResolved) : "[Insert MM/DD/YYYY]"
   const autoRenew = opp.autoRenewal ?? "[Insert Yes or No]"
   const endUser = opp.accountName ?? "[Insert End User Name]"
   const customer = opp.accountName ?? "[Insert Customer Name]"
@@ -160,7 +183,7 @@ function buildProvisioningTemplate(
     opp.winType === "PO Received"
       ? `Customer is renewing for ${termLabel}`
       : opp.winType === "Auto-Renew"
-        ? `Customer is auto-renewing for ${termLabel} (AR quote — Out for Signature)`
+        ? "Customer is being Auto-renewed"
         : `Customer signed the quote / is renewing for ${termLabel}`
 
   const lines = [
