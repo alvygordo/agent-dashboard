@@ -260,8 +260,9 @@ export function QuoteReviewAnalysisReport({
   const showUnsignedSignedComparison = mode === 'quote-signed-manual'
   const showSignedOnly = mode === 'quote-signed-adobe'
   const showPoReceived = mode === 'po-received'
+  const showAutoRenew = mode === 'auto-renew'
   const showPoSection = comparePo && (poProvided || showPoReceived)
-  const quoteColumnLabel = showPoReceived ? 'Unsigned quote' : 'Signed quote'
+  const quoteColumnLabel = showPoReceived || showAutoRenew ? (showAutoRenew ? 'AR quote' : 'Unsigned quote') : 'Signed quote'
   const extractedQuoteNumber = resolveQuoteNumber(
     docAnalysis?.documentIds.quoteNumber,
     primaryQuoteNumber,
@@ -443,7 +444,29 @@ export function QuoteReviewAnalysisReport({
         </section>
       )}
 
-      {(showUnsignedSignedComparison || showSignedOnly || showPoReceived) && (
+      {showAutoRenew && (
+        <section className="space-y-3">
+          <div>
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">AR quote</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              {docAnalysis?.quoteComparison.summary
+                ?? "Auto-Renew — confirm the unsigned AR quote PDF matches Salesforce before provisioning."}
+            </p>
+          </div>
+          <DocCompareColumn
+            title="AR quote"
+            subtitle="Primary quote (Out for Signature)"
+            linkLabel="Open AR quote PDF"
+            href={docs.unsignedQuoteUrl}
+            status={unsignedStatus}
+            pageCount={docAnalysis?.quoteComparison.unsignedPages ?? null}
+            titleFromPdf={docAnalysis?.unsigned?.title ?? null}
+          />
+          {quoteChecks.length > 0 && <ComparisonCheckTable checks={quoteChecks} />}
+        </section>
+      )}
+
+      {(showUnsignedSignedComparison || showSignedOnly || showPoReceived || showAutoRenew) && (
         <section className="space-y-3">
           <div>
             <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">Data alignment</h3>
@@ -458,7 +481,9 @@ export function QuoteReviewAnalysisReport({
               {docAnalysisLoading
                 ? "PDF analysis in progress — alignment status will update shortly."
                 : alignment.overallAligned
-                  ? `Core fields match across Salesforce, ${quoteColumnLabel.toLowerCase()}, and PO.`
+                  ? showAutoRenew
+                    ? 'Core fields match across Salesforce and AR quote.'
+                    : `Core fields match across Salesforce, ${quoteColumnLabel.toLowerCase()}, and PO.`
                   : docAnalysis
                     ? "Review mismatched rows above before accepting."
                     : `Salesforce column populated — complete PDF analysis to compare ${quoteColumnLabel.toLowerCase()} and PO.`}

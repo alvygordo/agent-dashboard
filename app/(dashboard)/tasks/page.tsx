@@ -36,6 +36,14 @@ function getTaskAction(subject: string, whatName: string | null): TaskAction | n
     return { type: "copilot", oppName: whatName ?? subject }
   }
 
+  // Auto-Renew provisioning ticket → SQ Reviewer
+  if (
+    sub.includes("provisioning ticket")
+    && sub.includes("auto renewal")
+  ) {
+    return { type: "sq-reviewer", oppName: whatName ?? subject }
+  }
+
   // Signed Quote Review → SQ Reviewer
   if (sub.includes("signed quote review")) {
     return { type: "sq-reviewer", oppName: whatName ?? subject }

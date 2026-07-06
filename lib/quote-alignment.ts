@@ -1,5 +1,5 @@
 import type { AnalysisFlag, AnalysisSeverity } from '@/lib/quote-review-analysis'
-import type { QuoteReviewMode } from '@/lib/quote-review-mode'
+import { usesUnsignedQuoteBaseline, type QuoteReviewMode } from '@/lib/quote-review-mode'
 import {
   datesAlign,
   formatFieldValue,
@@ -703,10 +703,10 @@ export function buildDocumentAnalysis(
   const s = signedForAnalysis?.fields ?? null
   const p = po?.fields ?? null
 
-  const quoteBaselineFields = mode === 'po-received' ? u : s
-  const quoteBaselineLabel = mode === 'po-received' ? 'unsigned quote' : 'signed quote'
-  const alignmentQuoteDoc = mode === 'po-received' ? unsigned : signedForAnalysis
-  const tcQuoteDoc = mode === 'po-received' ? unsigned : signedForAnalysis
+  const quoteBaselineFields = usesUnsignedQuoteBaseline(mode) ? u : s
+  const quoteBaselineLabel = usesUnsignedQuoteBaseline(mode) ? 'unsigned quote' : 'signed quote'
+  const alignmentQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsigned : signedForAnalysis
+  const tcQuoteDoc = usesUnsignedQuoteBaseline(mode) ? unsigned : signedForAnalysis
 
   const unsignedPages = unsigned?.pageCount ?? null
   const signedPages = signed?.pageCount ?? null
@@ -738,22 +738,28 @@ export function buildDocumentAnalysis(
     quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
     quoteSummary =
       'Primary quote is Adobe-signed — unsigned comparison skipped. Review signed quote vs PO below.'
-  } else if (mode === 'po-received') {
+  } else if (usesUnsignedQuoteBaseline(mode)) {
     const unsignedErr = errors.find((e) => e.doc === 'unsigned')
     if (unsignedErr) {
-      quoteChecks.push({ check: 'Unsigned quote PDF', severity: 'fail', finding: unsignedErr.message })
+      quoteChecks.push({
+        check: mode === 'auto-renew' ? 'AR quote PDF' : 'Unsigned quote PDF',
+        severity: 'fail',
+        finding: unsignedErr.message,
+      })
     } else if (unsigned) {
       quoteChecks.push({
-        check: 'Unsigned quote PDF',
+        check: mode === 'auto-renew' ? 'AR quote PDF' : 'Unsigned quote PDF',
         severity: 'pass',
-        finding: `Unsigned quote loaded${u?.quoteNumber || sf.primaryQuoteNumber ? ` — Quote ${resolveQuoteNumber(u?.quoteNumber ?? null, sf.primaryQuoteNumber) ?? sf.primaryQuoteNumber}` : ''}${unsignedPages != null ? ` (${unsignedPages} page${unsignedPages === 1 ? '' : 's'})` : ''}.`,
+        finding: `${mode === 'auto-renew' ? 'AR quote' : 'Unsigned quote'} loaded${u?.quoteNumber || sf.primaryQuoteNumber ? ` — Quote ${resolveQuoteNumber(u?.quoteNumber ?? null, sf.primaryQuoteNumber) ?? sf.primaryQuoteNumber}` : ''}${unsignedPages != null ? ` (${unsignedPages} page${unsignedPages === 1 ? '' : 's'})` : ''}.`,
       })
     }
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
     const quotePending = quoteChecks.some((c) => c.severity === 'pending')
     quoteOverall = quoteMismatch ? 'warn' : quotePending ? 'pending' : 'pass'
     quoteSummary =
-      'PO Received — customer did not sign the quote. Compare unsigned quote to PO in the Purchase order section.'
+      mode === 'auto-renew'
+        ? 'Auto-Renew — no signed quote or PO. Confirm AR quote PDF matches Salesforce, then copy the provisioning template.'
+        : 'PO Received — customer did not sign the quote. Compare unsigned quote to PO in the Purchase order section.'
   } else {
     quoteChecks = buildUnsignedSignedChecks(sf, unsigned, signedForAnalysis, errors)
     const quoteMismatch = quoteChecks.some((c) => c.severity === 'warn' || c.severity === 'fail')
@@ -771,7 +777,7 @@ export function buildDocumentAnalysis(
   let poOverall: AnalysisSeverity = 'pending'
 
   const quoteNumber = resolveQuoteNumber(
-    mode === 'po-received'
+    usesUnsignedQuoteBaseline(mode)
       ? (u?.quoteNumber ?? null)
       : (s?.quoteNumber ?? u?.quoteNumber ?? null),
     sf.primaryQuoteNumber,
@@ -876,7 +882,11 @@ export function buildDocumentAnalysis(
   ].filter((n) => /line item|footer mentions/i.test(n))
 
   const alignmentSourceLabel =
-    mode === 'po-received' ? 'unsigned quote and PO' : 'signed quote and PO'
+    mode === 'auto-renew'
+      ? 'AR quote'
+      : mode === 'po-received'
+        ? 'unsigned quote and PO'
+        : 'signed quote and PO'
 
   let alignmentSummary = pdfFailed
     ? 'PDF extraction failed for one or more documents — Salesforce values shown; open PDFs manually to complete alignment.'
@@ -961,7 +971,7 @@ export function documentFlagsFromAnalysis(
         category: 'manual',
       })
     }
-  } else if (mode === 'po-received') {
+  } else if (usesUnsignedQuoteBaseline(mode)) {
     for (const check of bundle.quoteComparison.checks) {
       flags.push({
         id: `pdf-${check.check.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,

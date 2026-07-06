@@ -2,7 +2,7 @@ import { formatUsDate } from '@/lib/sf-field-format'
 import type { DocumentAnalysisBundle } from '@/lib/quote-alignment'
 import { documentFlagsFromAnalysis } from '@/lib/quote-alignment'
 import type { QuoteReviewMode } from '@/lib/quote-review-mode'
-import { resolveQuoteReviewMode } from '@/lib/quote-review-mode'
+import { resolveQuoteReviewMode, VALID_SQ_REVIEW_WIN_TYPES, isOutForSignatureStatus } from '@/lib/quote-review-mode'
 
 export type AnalysisSeverity = 'pass' | 'warn' | 'fail' | 'pending'
 
@@ -42,7 +42,7 @@ export type QuoteReviewAnalysis = {
   documentAnalysis?: DocumentAnalysisBundle | null
 }
 
-const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
+const VALID_WIN_TYPES = VALID_SQ_REVIEW_WIN_TYPES
 
 function severityRank(s: AnalysisSeverity): number {
   if (s === 'fail') return 3
@@ -78,7 +78,7 @@ export function buildQuoteReviewAnalysis(
     flags.push({
       id: 'win-type-missing',
       label: 'Win Type not set',
-      detail: 'Opportunity Win Type is blank. Expected Quote Signed or PO Received before accepting the signed quote.',
+      detail: 'Opportunity Win Type is blank. Expected Quote Signed, PO Received, or Auto-Renew before provisioning.',
       severity: 'warn',
       category: 'gate',
     })
@@ -86,7 +86,7 @@ export function buildQuoteReviewAnalysis(
     flags.push({
       id: 'win-type-invalid',
       label: 'Win Type gate',
-      detail: `Win Type is "${input.winType}". This workflow is for Quote Signed or PO Received only.`,
+      detail: `Win Type is "${input.winType}". This workflow is for Quote Signed, PO Received, or Auto-Renew only.`,
       severity: 'fail',
       category: 'gate',
     })
@@ -98,7 +98,28 @@ export function buildQuoteReviewAnalysis(
       severity: 'pass',
       category: 'gate',
     })
-    if (input.primaryQuoteStatus) {
+    if (mode === 'auto-renew') {
+      if (input.primaryQuoteStatus) {
+        const ok = isOutForSignatureStatus(input.primaryQuoteStatus)
+        flags.push({
+          id: 'ar-quote-status',
+          label: 'AR quote status',
+          detail: ok
+            ? `${input.primaryQuoteStatus} — expected for Auto-Renew.`
+            : `Primary quote status is "${input.primaryQuoteStatus}" — expected Out for Signature for Auto-Renew AR quote.`,
+          severity: ok ? 'pass' : 'fail',
+          category: 'gate',
+        })
+      } else {
+        flags.push({
+          id: 'ar-quote-status-missing',
+          label: 'AR quote status',
+          detail: 'Primary quote status not found — confirm the AR quote is Out for Signature.',
+          severity: 'warn',
+          category: 'gate',
+        })
+      }
+    } else if (input.primaryQuoteStatus) {
       flags.push({
         id: 'primary-quote-status',
         label: 'Primary quote status',
@@ -125,24 +146,30 @@ export function buildQuoteReviewAnalysis(
     }
   }
 
-  const needsUnsigned = mode === 'quote-signed-manual' || mode === 'po-received'
+  const needsUnsigned = mode === 'quote-signed-manual' || mode === 'po-received' || mode === 'auto-renew'
   const needsSigned = mode === 'quote-signed-adobe' || mode === 'quote-signed-manual'
   const needsPo = mode === 'po-received' || reviewPlan.requiresPo
+
+  const unsignedDocLabel = mode === 'auto-renew' ? 'AR quote' : 'Unsigned quote'
 
   if (needsUnsigned) {
     if (input.unsignedQuoteUrl.trim()) {
       flags.push({
         id: 'unsigned-doc',
-        label: 'Unsigned quote',
-        detail: 'Baseline document link provided.',
+        label: unsignedDocLabel,
+        detail: mode === 'auto-renew'
+          ? 'AR quote PDF link provided from primary quote attachments.'
+          : 'Baseline document link provided.',
         severity: 'pass',
         category: 'documents',
       })
     } else {
       flags.push({
         id: 'unsigned-missing',
-        label: 'Unsigned quote missing',
-        detail: 'Add the unsigned baseline quote link from the primary quote attachments.',
+        label: `${unsignedDocLabel} missing`,
+        detail: mode === 'auto-renew'
+          ? 'Add the AR quote PDF link from the primary quote Notes & Attachments.'
+          : 'Add the unsigned baseline quote link from the primary quote attachments.',
         severity: 'fail',
         category: 'documents',
       })
@@ -223,7 +250,9 @@ export function buildQuoteReviewAnalysis(
         ? 'Analyzing signed quote and PO…'
         : mode === 'po-received'
           ? 'Analyzing unsigned quote and PO…'
-          : 'Analyzing PDFs…'
+          : mode === 'auto-renew'
+            ? 'Analyzing AR quote PDF…'
+            : 'Analyzing PDFs…'
     flags.push({
       id: 'pdf-diff',
       label: 'Document comparison',
@@ -335,11 +364,15 @@ export function buildQuoteReviewAnalysis(
         ? 'Complete manual review of the signed quote and PO before opening a provisioning ticket.'
         : mode === 'po-received'
           ? 'Complete manual review of the unsigned quote and PO before opening a provisioning ticket.'
-          : 'Complete manual document review (unsigned vs signed, and PO if applicable) before opening a provisioning ticket.'
+          : mode === 'auto-renew'
+            ? 'Complete manual review of the AR quote PDF before opening a provisioning ticket.'
+            : 'Complete manual document review (unsigned vs signed, and PO if applicable) before opening a provisioning ticket.'
       : 'Review flagged items below, then proceed if documents match Salesforce and the quote.'
   } else {
     recommendation =
-      mode === 'po-received'
+      mode === 'auto-renew'
+        ? 'Preliminary checks passed. Confirm AR quote PDF matches Salesforce, then copy the provisioning template.'
+        : mode === 'po-received'
         ? 'Preliminary checks passed. Confirm unsigned quote vs PO alignment, then copy the provisioning template.'
         : mode === 'quote-signed-adobe'
           ? 'Preliminary checks passed. Confirm signed quote vs PO alignment, then copy the provisioning template.'

@@ -2,7 +2,14 @@ export type QuoteReviewMode =
   | 'quote-signed-adobe'
   | 'quote-signed-manual'
   | 'po-received'
+  | 'auto-renew'
   | 'unsupported'
+
+export const VALID_SQ_REVIEW_WIN_TYPES = new Set([
+  'Quote Signed',
+  'PO Received',
+  'Auto-Renew',
+])
 
 export type PoRequirementStatus =
   | 'not-required'
@@ -26,7 +33,7 @@ export type ReviewModePlan = {
   provisioningUsesUnsigned: boolean
 }
 
-const VALID_WIN = new Set(['Quote Signed', 'PO Received'])
+const VALID_WIN = VALID_SQ_REVIEW_WIN_TYPES
 
 export function parsePoRequirement(
   raw: string | null | undefined,
@@ -50,6 +57,15 @@ export function isPrimaryQuoteAdobeSigned(status: string | null | undefined): bo
   return status.trim().toLowerCase() === 'signed'
 }
 
+export function isOutForSignatureStatus(status: string | null | undefined): boolean {
+  if (!status?.trim()) return false
+  return status.trim().toLowerCase() === 'out for signature'
+}
+
+export function usesUnsignedQuoteBaseline(mode: QuoteReviewMode): boolean {
+  return mode === 'po-received' || mode === 'auto-renew'
+}
+
 export function resolveQuoteReviewMode(input: {
   winType: string | null | undefined
   primaryQuoteStatus: string | null | undefined
@@ -66,8 +82,28 @@ export function resolveQuoteReviewMode(input: {
     return {
       mode: 'unsupported',
       title: 'Unsupported Win Type',
-      description: 'Win Type must be Quote Signed or PO Received before running this workflow.',
+      description:
+        'Win Type must be Quote Signed, PO Received, or Auto-Renew before running this workflow.',
       requiresUnsigned: false,
+      requiresSigned: false,
+      requiresPo: false,
+      comparePo: false,
+      poRequirement: poReq.status === 'unknown' ? null : poReq.status,
+      poRequirementRaw: poReq.raw,
+      showUnsignedSignedComparison: false,
+      showSignedPoComparison: false,
+      showUnsignedPoComparison: false,
+      provisioningUsesUnsigned: true,
+    }
+  }
+
+  if (winType === 'Auto-Renew') {
+    return {
+      mode: 'auto-renew',
+      title: 'Auto-Renew — provisioning from AR quote',
+      description:
+        'Customer is auto-renewing — no signed quote or PO. Primary quote (AR) should be Out for Signature. Read the unsigned quote PDF from the primary quote Notes & Attachments and create a provisioning ticket from that document.',
+      requiresUnsigned: true,
       requiresSigned: false,
       requiresPo: false,
       comparePo: false,
@@ -166,5 +202,6 @@ export function modeLabel(mode: QuoteReviewMode, comparePo = true): string {
       : 'Manual signature — unsigned vs signed'
   }
   if (mode === 'po-received') return 'PO Received — unsigned quote vs PO'
+  if (mode === 'auto-renew') return 'Auto-Renew — AR quote vs Salesforce'
   return 'Unsupported Win Type'
 }

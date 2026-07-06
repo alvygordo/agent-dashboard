@@ -7,10 +7,8 @@ import {
   parseUserCountFromLines,
   toLightningBaseUrl,
 } from '@/lib/sf-field-format'
-import { resolveQuoteReviewMode } from '@/lib/quote-review-mode'
+import { resolveQuoteReviewMode, VALID_SQ_REVIEW_WIN_TYPES } from '@/lib/quote-review-mode'
 import { fetchPrimaryQuoteInfo } from '@/lib/sf-primary-quote'
-
-const VALID_WIN_TYPES = new Set(['Quote Signed', 'PO Received'])
 
 type OppRow = Record<string, unknown> & {
   Id: string
@@ -245,7 +243,7 @@ async function mapOpp(
     accountName: opp.Account?.Name ?? null,
     ownerName: opp.Owner?.Name ?? null,
     winType,
-    winTypeValid: winType ? VALID_WIN_TYPES.has(winType) : false,
+    winTypeValid: winType ? VALID_SQ_REVIEW_WIN_TYPES.has(winType) : false,
     signedQuoteUrl,
     purchaseOrderLink,
     purchaseOrderRequirement:

@@ -6,7 +6,7 @@ import {
   type DocumentAnalysisBundle,
   type SfAlignmentInput,
 } from '@/lib/quote-alignment'
-import type { QuoteReviewMode } from '@/lib/quote-review-mode'
+import { usesUnsignedQuoteBaseline, type QuoteReviewMode } from '@/lib/quote-review-mode'
 import { type ExtractOptions, parseDocumentText } from '@/lib/quote-field-extract'
 import { connectSalesforce } from '@/lib/sf-connect'
 
@@ -72,6 +72,7 @@ const VALID_MODES = new Set<QuoteReviewMode>([
   'quote-signed-adobe',
   'quote-signed-manual',
   'po-received',
+  'auto-renew',
 ])
 
 export async function POST(req: NextRequest) {
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid analysis mode' }, { status: 400 })
   }
 
-  const needsUnsigned = mode === 'quote-signed-manual' || mode === 'po-received'
+  const needsUnsigned = mode === 'quote-signed-manual' || usesUnsignedQuoteBaseline(mode)
   const needsSigned = mode === 'quote-signed-adobe' || mode === 'quote-signed-manual'
 
   if (needsUnsigned && !body.unsignedQuoteUrl?.trim()) {
@@ -150,7 +151,7 @@ export async function POST(req: NextRequest) {
       : { doc: null, error: null }
 
     const poBaselineTotal =
-      mode === 'po-received'
+      usesUnsignedQuoteBaseline(mode)
         ? (unsignedResult.doc?.fields.totalAmount ?? arrHint)
         : (signedResult.doc?.fields.totalAmount ?? unsignedResult.doc?.fields.totalAmount ?? arrHint)
 
@@ -160,7 +161,7 @@ export async function POST(req: NextRequest) {
           productHint,
           expectedTotal: poBaselineTotal,
           mirrorSupplier:
-            mode === 'po-received'
+            usesUnsignedQuoteBaseline(mode)
               ? unsignedResult.doc?.fields.supplierName ?? null
               : signedResult.doc?.fields.supplierName ?? null,
         })

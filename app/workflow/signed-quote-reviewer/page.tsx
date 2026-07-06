@@ -80,10 +80,12 @@ function documentsBlockReason(
   docs: DocLinks,
 ): string | null {
   if (plan.mode === "unsupported") {
-    return "Win Type must be Quote Signed or PO Received"
+    return "Win Type must be Quote Signed, PO Received, or Auto-Renew"
   }
   if (plan.requiresUnsigned && !docs.unsignedQuoteUrl.trim()) {
-    return "Unsigned quote link is required — open the primary quote Notes & Attachments if not auto-filled"
+    return plan.mode === "auto-renew"
+      ? "AR quote link is required — open the primary quote Notes & Attachments if not auto-filled"
+      : "Unsigned quote link is required — open the primary quote Notes & Attachments if not auto-filled"
   }
   if (plan.requiresSigned && !docs.signedQuoteUrl.trim()) {
     return "Signed quote link is required from the Signed Quote field"
@@ -119,7 +121,7 @@ const STEP_COUNT = STEPS.length
 
 function quoteFieldsForTemplate(docAnalysis?: DocumentAnalysisBundle | null) {
   if (!docAnalysis) return null
-  if (docAnalysis.analysisMode === "po-received") {
+  if (docAnalysis.analysisMode === "po-received" || docAnalysis.analysisMode === "auto-renew") {
     return docAnalysis.unsigned?.fields ?? docAnalysis.signed?.fields ?? null
   }
   return docAnalysis.signed?.fields ?? docAnalysis.unsigned?.fields ?? null
@@ -157,7 +159,9 @@ function buildProvisioningTemplate(
   const reason =
     opp.winType === "PO Received"
       ? `Customer is renewing for ${termLabel}`
-      : `Customer signed the quote / is renewing for ${termLabel}`
+      : opp.winType === "Auto-Renew"
+        ? `Customer is auto-renewing for ${termLabel} (AR quote — Out for Signature)`
+        : `Customer signed the quote / is renewing for ${termLabel}`
 
   const lines = [
     `${endUser} : ${months} months ${product} License Renewal`,
@@ -627,12 +631,18 @@ function SignedQuoteReviewerInner() {
               <div className="space-y-4">
                 {reviewPlan.requiresUnsigned && (
                   <div className="space-y-1">
-                    <label className="text-sm font-medium text-gray-700">Unsigned quote link *</label>
+                    <label className="text-sm font-medium text-gray-700">
+                      {reviewPlan.mode === "auto-renew" ? "AR quote link *" : "Unsigned quote link *"}
+                    </label>
                     <input
                       type="url"
                       value={docs.unsignedQuoteUrl}
                       onChange={(e) => setDocs((d) => ({ ...d, unsignedQuoteUrl: e.target.value }))}
-                      placeholder="From primary quote → Notes & Attachments"
+                      placeholder={
+                        reviewPlan.mode === "auto-renew"
+                          ? "From primary quote → Related → Notes & Attachments (unsigned AR quote PDF)"
+                          : "From primary quote → Notes & Attachments"
+                      }
                       className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
                     />
                     {oppData.unsignedQuoteAttachmentTitle && (
@@ -664,6 +674,11 @@ function SignedQuoteReviewerInner() {
                       placeholder="From Purchase Order Link field — Required - Attached"
                       className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}
                     />
+                  </div>
+                )}
+                {reviewPlan.mode === "auto-renew" && (
+                  <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                    Auto-Renew — no signed quote or PO. Primary quote should be <strong>Out for Signature</strong>. Create the provisioning ticket from the unsigned AR quote PDF.
                   </div>
                 )}
                 {!reviewPlan.comparePo && reviewPlan.poRequirement === "required-pending" && (
@@ -756,7 +771,7 @@ function SignedQuoteReviewerInner() {
               <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of {STEP_COUNT}</Badge>
               <h2 className="text-2xl font-bold text-gray-900">Provisioning Template</h2>
               <p className="text-sm text-gray-500 mt-1">
-                Copy the template below for provisioning. For PO-only renewals, values come from the unsigned quote / Salesforce opportunity.
+                Copy the template below for provisioning. For PO-only or Auto-Renew renewals, values come from the unsigned / AR quote and Salesforce opportunity.
               </p>
             </div>
 
