@@ -74,10 +74,27 @@ const MONTH_NAMES = [
   'july', 'august', 'september', 'october', 'november', 'december',
 ]
 
+const MONTH_ABBREVS = [
+  'jan', 'feb', 'mar', 'apr', 'may', 'jun',
+  'jul', 'aug', 'sep', 'oct', 'nov', 'dec',
+]
+
+function monthIndexFromToken(token: string): number {
+  const t = token.toLowerCase().replace(/\.$/, '')
+  const fullIdx = MONTH_NAMES.indexOf(t)
+  if (fullIdx >= 0) return fullIdx
+  const abbrIdx = MONTH_ABBREVS.indexOf(t.slice(0, 3))
+  if (abbrIdx >= 0) return abbrIdx
+  for (let i = 0; i < MONTH_NAMES.length; i++) {
+    if (MONTH_NAMES[i].startsWith(t) || t.startsWith(MONTH_ABBREVS[i])) return i
+  }
+  return -1
+}
+
 function parseSpelledDate(value: string): string | null {
   const m = value.match(/(\w+)\s+(\d{1,2}),?\s+(\d{4})/i)
   if (!m) return null
-  const monthIdx = MONTH_NAMES.indexOf(m[1].toLowerCase())
+  const monthIdx = monthIndexFromToken(m[1])
   if (monthIdx < 0) return null
   const mm = String(monthIdx + 1).padStart(2, '0')
   const dd = String(parseInt(m[2], 10)).padStart(2, '0')
@@ -125,9 +142,9 @@ export function normalizeDateForCompare(value: string | null | undefined): strin
     if (p) return `${p[3]}-${p[1]}-${p[2]}`
   }
 
-  const dmy = v.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/i)
+  const dmy = v.match(new RegExp(`^(\\d{1,2})${DATE_PART_SEP}([A-Za-z]{3,9})${DATE_PART_SEP}(\\d{4})$`, 'i'))
   if (dmy) {
-    const monthIdx = MONTH_NAMES.indexOf(dmy[2].toLowerCase())
+    const monthIdx = monthIndexFromToken(dmy[2])
     if (monthIdx >= 0) {
       return `${dmy[3]}-${String(monthIdx + 1).padStart(2, '0')}-${String(parseInt(dmy[1], 10)).padStart(2, '0')}`
     }
@@ -214,7 +231,7 @@ export function resolveQuoteExpiryDate(args: {
 const DATE_PART_SEP = '[-/\\s\u2010-\u2015]+'
 
 function parseDayMonthYear(day: string, monthToken: string, year: string): string | null {
-  const monthIdx = MONTH_NAMES.indexOf(monthToken.toLowerCase())
+  const monthIdx = monthIndexFromToken(monthToken)
   if (monthIdx < 0) return null
   const mm = String(monthIdx + 1).padStart(2, '0')
   const dd = String(parseInt(day, 10)).padStart(2, '0')
@@ -229,13 +246,18 @@ function parseMonDateToken(value: string): string | null {
 }
 
 function parseFlexibleDate(value: string): string | null {
-  const v = value.trim()
-  if (isPlausibleDate(v)) return v
+  const v = value.trim().replace(/[\u2010-\u2015]/g, '-')
 
   const monDate = parseMonDateToken(v)
   if (monDate) return monDate
 
-  return parseSpelledDate(v)
+  const spelled = parseSpelledDate(v)
+  if (spelled) return spelled
+
+  if (/^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v)) return v
+  if (/^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/.test(v)) return v
+
+  return null
 }
 
 function extractLabeledFlexibleDate(text: string, labels: string[]): string | null {
@@ -379,37 +401,44 @@ function extractDateOnNextLine(text: string, label: string): string | null {
 function extractTermBlockDates(
   text: string,
 ): { renewal: string | null; expiry: string | null; term: string | null } {
+  const monDate = `(\\d{1,2})${DATE_PART_SEP}([A-Za-z]{3,9})${DATE_PART_SEP}(\\d{4})`
   const inlineRow = text.match(
-    /Term\s+Start\s+Date\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})\s+Term\s+End\s+Date\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})/i,
+    new RegExp(`Term\\s+Start\\s+Date\\s+${monDate}\\s+Term\\s+End\\s+Date\\s+${monDate}`, 'i'),
   )
   if (inlineRow) {
     const termM = text.match(/Term\s+Duration\s+(\d+\s*months?)/i)
     return {
-      renewal: parseFlexibleDate(inlineRow[1]),
-      expiry: parseFlexibleDate(inlineRow[2]),
+      renewal: parseFlexibleDate(`${inlineRow[1]}-${inlineRow[2]}-${inlineRow[3]}`),
+      expiry: parseFlexibleDate(`${inlineRow[4]}-${inlineRow[5]}-${inlineRow[6]}`),
       term: termM?.[1] ?? null,
     }
   }
 
   const tableRow = text.match(
-    /Term\s+Start\s+Date\s+Term\s+End\s+Date\s+Term\s+Duration[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})\s+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})(?:\s+(\d+\s*months?))?/i,
+    new RegExp(
+      `Term\\s+Start\\s+Date\\s+Term\\s+End\\s+Date\\s+Term\\s+Duration[\\s\\n]+${monDate}\\s+${monDate}(?:\\s+(\\d+\\s*months?))?`,
+      'i',
+    ),
   )
   if (tableRow) {
     return {
-      renewal: parseFlexibleDate(tableRow[1]),
-      expiry: parseFlexibleDate(tableRow[2]),
-      term: tableRow[3] ?? null,
+      renewal: parseFlexibleDate(`${tableRow[1]}-${tableRow[2]}-${tableRow[3]}`),
+      expiry: parseFlexibleDate(`${tableRow[4]}-${tableRow[5]}-${tableRow[6]}`),
+      term: tableRow[7] ?? null,
     }
   }
 
   const stackedRow = text.match(
-    /Term\s+Start\s+Date[\s\S]{0,60}?Term\s+End\s+Date[\s\S]{0,60}?Term\s+Duration[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})[\s\n]+(\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4})[\s\n]+(\d+\s*months?)/i,
+    new RegExp(
+      `Term\\s+Start\\s+Date[\\s\\S]{0,60}?Term\\s+End\\s+Date[\\s\\S]{0,60}?Term\\s+Duration[\\s\\n]+${monDate}[\\s\\n]+${monDate}[\\s\\n]+(\\d+\\s*months?)`,
+      'i',
+    ),
   )
   if (stackedRow) {
     return {
-      renewal: parseFlexibleDate(stackedRow[1]),
-      expiry: parseFlexibleDate(stackedRow[2]),
-      term: stackedRow[3] ?? null,
+      renewal: parseFlexibleDate(`${stackedRow[1]}-${stackedRow[2]}-${stackedRow[3]}`),
+      expiry: parseFlexibleDate(`${stackedRow[4]}-${stackedRow[5]}-${stackedRow[6]}`),
+      term: stackedRow[7] ?? null,
     }
   }
 
