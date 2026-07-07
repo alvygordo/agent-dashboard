@@ -5,6 +5,7 @@ import {
   finalizeQuoteDocumentFields,
   formatFieldValue,
   formatQuoteDateDisplay,
+  normalizeDateForCompare,
   paymentTermsAlign,
   resolveProvisioningDates,
   sanitizeQuoteFields,
@@ -176,7 +177,20 @@ function formatAlignmentDate(value: string | null | undefined): string {
 function enrichQuoteDocument(doc: ParsedDocument | null): ParsedDocument | null {
   if (!doc) return null
   const fullText = doc.pageTexts.length > 0 ? doc.pageTexts.join('\n') : null
-  return { ...doc, fields: finalizeQuoteDocumentFields(doc.fields, fullText) }
+  const finalized = finalizeQuoteDocumentFields(doc.fields, fullText)
+  const provisioned = resolveProvisioningDates({
+    renewalDate: finalized.renewalDate,
+    extractedExpiry: finalized.expiryDate,
+    term: finalized.term,
+  })
+  return {
+    ...doc,
+    fields: {
+      ...finalized,
+      renewalDate: provisioned.renewalDate ?? finalized.renewalDate,
+      expiryDate: provisioned.expiryDate ?? finalized.expiryDate,
+    },
+  }
 }
 
 function buildAlignmentRows(
@@ -224,19 +238,23 @@ function buildAlignmentRows(
     { field: 'Users / seats / qty', mode: 'sf-signed', sf: sfFields.quantity, signed: sq?.quantity ?? null, po: poFields?.quantity ?? null },
     {
       field: 'Renewal date (term start)',
-      mode: 'signed-po',
+      mode: quoteVsSf ? 'sf-signed' : 'signed-po',
       sf: sfFields.renewalDate,
       signed: sq?.renewalDate ?? null,
       po: poFields?.renewalDate ?? null,
-      sfDisplay: sfFields.renewalDate ? `${sfFields.renewalDate} (current term)` : '—',
+      sfDisplay: sfFields.renewalDate
+        ? `${sfFields.renewalDate}${quoteVsSf ? ' (opp renewal)' : ' (current term)'}`
+        : '—',
     },
     {
       field: 'Expiry date (term end)',
-      mode: 'signed-po',
+      mode: quoteVsSf ? 'sf-signed' : 'signed-po',
       sf: sfFields.expiryDate,
       signed: sq?.expiryDate ?? null,
       po: poFields?.expiryDate ?? null,
-      sfDisplay: sfFields.expiryDate ? `${sfFields.expiryDate} (current term)` : '—',
+      sfDisplay: sfFields.expiryDate
+        ? `${sfFields.expiryDate}${quoteVsSf ? ' (prior term)' : ' (current term)'}`
+        : '—',
     },
     {
       field: 'Term duration',
@@ -267,8 +285,15 @@ function buildAlignmentRows(
   ]
 
   return specs.map((spec) => {
-    const signedVal = spec.signed
+    let signedVal = spec.signed
     const poVal = spec.po
+    if (quoteVsSf && spec.field === 'Expiry date (term end)' && sq?.renewalDate) {
+      signedVal = resolveProvisioningDates({
+        renewalDate: sq.renewalDate,
+        extractedExpiry: sq.expiryDate,
+        term: sq.term,
+      }).expiryDate ?? signedVal
+    }
     let status: AlignmentStatus
 
     if (spec.field === 'Payment terms') {
@@ -298,16 +323,20 @@ function buildAlignmentRows(
       }
     } else if (spec.field === 'Expiry date (term end)') {
       if (quoteVsSf) {
-        const expected = sq?.renewalDate
+        const provisioned = sq?.renewalDate
           ? resolveProvisioningDates({
             renewalDate: sq.renewalDate,
             extractedExpiry: sq.expiryDate,
             term: sq.term,
-          }).expiryDate
+          })
           : null
-        status = !sq?.expiryDate || !expected
+        const expiry = provisioned?.expiryDate ?? sq?.expiryDate ?? null
+        const renewal = provisioned?.renewalDate ?? sq?.renewalDate ?? null
+        status = !expiry || !renewal
           ? 'unknown'
-          : datesAlign(sq.expiryDate, expected) ? 'aligned' : 'mismatch'
+          : normalizeDateForCompare(expiry)! > normalizeDateForCompare(renewal)!
+            ? 'aligned'
+            : 'mismatch'
       } else {
         status = !sq?.expiryDate && !poFields?.expiryDate
           ? 'unknown'
@@ -957,7 +986,7 @@ export function buildDocumentAnalysis(
       poReferencesQuote: quoteRef.found,
       poReferencesQuoteDetail: quoteRef.detail,
     },
-    unsigned,
+    unsigned: unsignedForAnalysis ?? unsigned,
     signed: signedForAnalysis,
     purchaseOrder: po,
     errors,

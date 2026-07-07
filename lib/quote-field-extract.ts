@@ -102,7 +102,7 @@ function isPlausibleDate(value: string): boolean {
   const v = value.trim()
   return /^\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}$/.test(v)
     || /^\d{4}[/.-]\d{1,2}[/.-]\d{1,2}$/.test(v)
-    || /^\d{1,2}[-/][A-Za-z]{3,9}[-/]\d{4}$/.test(v)
+    || /^\d{1,2}[-/\s][A-Za-z]{3,9}[-/\s]\d{4}$/i.test(v)
 }
 
 /** Normalize any extracted date to YYYY-MM-DD for comparison. */
@@ -117,6 +117,12 @@ export function normalizeDateForCompare(value: string | null | undefined): strin
   if (us) {
     const y = us[3].length === 2 ? `20${us[3]}` : us[3]
     return `${y}-${String(parseInt(us[1], 10)).padStart(2, '0')}-${String(parseInt(us[2], 10)).padStart(2, '0')}`
+  }
+
+  const monDate = parseMonDateToken(v)
+  if (monDate) {
+    const p = monDate.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (p) return `${p[3]}-${p[1]}-${p[2]}`
   }
 
   const dmy = v.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/i)
@@ -205,19 +211,29 @@ export function resolveQuoteExpiryDate(args: {
   return null
 }
 
+const DATE_PART_SEP = '[-/\\s\u2010-\u2015]+'
+
+function parseDayMonthYear(day: string, monthToken: string, year: string): string | null {
+  const monthIdx = MONTH_NAMES.indexOf(monthToken.toLowerCase())
+  if (monthIdx < 0) return null
+  const mm = String(monthIdx + 1).padStart(2, '0')
+  const dd = String(parseInt(day, 10)).padStart(2, '0')
+  return `${mm}/${dd}/${year}`
+}
+
+function parseMonDateToken(value: string): string | null {
+  const v = value.trim().replace(/[\u2010-\u2015]/g, '-')
+  const dmy = v.match(new RegExp(`^(\\d{1,2})${DATE_PART_SEP}([A-Za-z]{3,9})${DATE_PART_SEP}(\\d{4})$`, 'i'))
+  if (dmy) return parseDayMonthYear(dmy[1], dmy[2], dmy[3])
+  return null
+}
+
 function parseFlexibleDate(value: string): string | null {
   const v = value.trim()
   if (isPlausibleDate(v)) return v
 
-  const dmy = v.match(/^(\d{1,2})[-/]([A-Za-z]{3,9})[-/](\d{4})$/i)
-  if (dmy) {
-    const monthIdx = MONTH_NAMES.indexOf(dmy[2].toLowerCase())
-    if (monthIdx >= 0) {
-      const mm = String(monthIdx + 1).padStart(2, '0')
-      const dd = String(parseInt(dmy[1], 10)).padStart(2, '0')
-      return `${mm}/${dd}/${dmy[3]}`
-    }
-  }
+  const monDate = parseMonDateToken(v)
+  if (monDate) return monDate
 
   return parseSpelledDate(v)
 }
@@ -226,7 +242,7 @@ function extractLabeledFlexibleDate(text: string, labels: string[]): string | nu
   for (const label of labels) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(
-      `${escaped}\\s*:?\\s*(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+      `${escaped}\\s*:?\\s*(\\d{1,2}${DATE_PART_SEP}[A-Za-z]{3,9}${DATE_PART_SEP}\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
       'gi',
     )
     for (const m of text.matchAll(re)) {
@@ -337,7 +353,7 @@ function extractAllLabeledFlexibleDates(text: string, labels: string[]): string[
   for (const label of labels) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(
-      `${escaped}\\s*:?\\s*(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+      `${escaped}\\s*:?\\s*(\\d{1,2}${DATE_PART_SEP}[A-Za-z]{3,9}${DATE_PART_SEP}\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
       'gi',
     )
     for (const m of text.matchAll(re)) {
@@ -352,7 +368,7 @@ function extractAllLabeledFlexibleDates(text: string, labels: string[]): string[
 function extractDateOnNextLine(text: string, label: string): string | null {
   const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const re = new RegExp(
-    `${escaped}\\s*:?(?:\\s+|\\n+)(\\d{1,2}[-/][A-Za-z]{3,9}[-/]\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
+    `${escaped}\\s*:?(?:\\s+|\\n+)(\\d{1,2}${DATE_PART_SEP}[A-Za-z]{3,9}${DATE_PART_SEP}\\d{4}|\\d{1,2}[/.-]\\d{1,2}[/.-]\\d{2,4})`,
     'i',
   )
   const m = text.match(re)
@@ -448,19 +464,41 @@ export function resolveProvisioningDates(input: {
   const renewalDate = input.renewalDate?.trim() ?? null
   const term = input.term
   const months = termDurationMonths(term)
+  const rNorm = renewalDate ? normalizeDateForCompare(renewalDate) : null
 
-  let expiryDate = resolveQuoteExpiryDate({
-    renewalDate,
-    extractedExpiry: input.extractedExpiry,
-    term,
-  })
+  let expiryDate: string | null = null
+  const extracted = input.extractedExpiry?.trim() ?? null
+  const extractedNorm = extracted ? normalizeDateForCompare(extracted) : null
 
-  if (renewalDate && months && months > 0) {
-    const r = normalizeDateForCompare(renewalDate)
-    const e = expiryDate ? normalizeDateForCompare(expiryDate) : null
-    if (!e || (r && e <= r)) {
-      expiryDate = formatStoredDate(computeExpiryFromRenewalAndTerm(renewalDate, months))
+  if (
+    extracted
+    && rNorm
+    && extractedNorm
+    && extractedNorm > rNorm
+    && months
+    && months > 0
+  ) {
+    const computedNorm = normalizeDateForCompare(
+      computeExpiryFromRenewalAndTerm(renewalDate!, months),
+    )
+    if (computedNorm && Math.abs(
+      new Date(`${extractedNorm}T12:00:00Z`).getTime()
+      - new Date(`${computedNorm}T12:00:00Z`).getTime(),
+    ) <= 86_400_000 * 3) {
+      expiryDate = formatStoredDate(extracted)
     }
+  }
+
+  if (!expiryDate && renewalDate && months && months > 0) {
+    expiryDate = formatStoredDate(computeExpiryFromRenewalAndTerm(renewalDate, months))
+  }
+
+  if (!expiryDate) {
+    expiryDate = resolveQuoteExpiryDate({
+      renewalDate,
+      extractedExpiry: extracted,
+      term,
+    })
   }
 
   return { renewalDate, expiryDate }
@@ -491,7 +529,7 @@ export function finalizeQuoteDocumentFields(
   return {
     ...fields,
     renewalDate: resolved.renewalDate,
-    expiryDate: resolved.expiryDate ?? fields.expiryDate,
+    expiryDate: resolved.expiryDate,
   }
 }
 
@@ -1213,7 +1251,7 @@ export function extractFieldsFromText(
     notes,
   } as ExtractedDocumentFields
 
-  return finalizeQuoteDocumentFields(rawFields, text)
+  return finalizeQuoteDocumentFields(rawFields, fullScope)
 }
 
 export type QuoteFieldHints = {
