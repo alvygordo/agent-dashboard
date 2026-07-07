@@ -10,10 +10,17 @@ export type PrimaryQuoteInfo = {
   unsignedAttachmentTitle: string | null
 }
 
+export type QuoteTaskContext = PrimaryQuoteInfo & {
+  oppId: string | null
+  oppName: string | null
+}
+
 type QuoteRow = {
   Id: string
   Name?: string
   SBQQ__Status__c?: string | null
+  SBQQ__Opportunity2__c?: string | null
+  SBQQ__Opportunity2__r?: { Name?: string | null } | null
 }
 
 type LinkRow = {
@@ -165,23 +172,25 @@ export async function fetchArQuotesByOpp(
   return byOpp
 }
 
-/** CPQ quotes by Id (for Cancel AR Quotes tasks linked directly to SBQQ__Quote__c). */
-export async function fetchQuotesById(
+/** CPQ quotes by Id, including parent opportunity for task Related To display. */
+export async function fetchQuoteTaskContextsById(
   conn: Connection,
   quoteIds: string[],
   lightningBase: string,
-): Promise<Map<string, PrimaryQuoteInfo>> {
+): Promise<Map<string, QuoteTaskContext>> {
   const uniqueIds = [...new Set(quoteIds.filter(Boolean))]
   if (uniqueIds.length === 0) return new Map()
 
   const inClause = uniqueIds.map((id) => `'${id.replace(/'/g, "\\'")}'`).join(',')
   const result = await conn.query<QuoteRow>(
-    `SELECT Id, Name, SBQQ__Status__c
+    `SELECT Id, Name, SBQQ__Status__c,
+            SBQQ__Opportunity2__c,
+            SBQQ__Opportunity2__r.Name
      FROM SBQQ__Quote__c
      WHERE Id IN (${inClause})`,
   )
 
-  const byId = new Map<string, PrimaryQuoteInfo>()
+  const byId = new Map<string, QuoteTaskContext>()
   for (const row of result.records) {
     byId.set(row.Id, {
       id: row.Id,
@@ -191,8 +200,20 @@ export async function fetchQuotesById(
       quoteUrl: `${lightningBase}/lightning/r/SBQQ__Quote__c/${row.Id}/view`,
       unsignedAttachmentUrl: null,
       unsignedAttachmentTitle: null,
+      oppId: row.SBQQ__Opportunity2__c ?? null,
+      oppName: row.SBQQ__Opportunity2__r?.Name ?? null,
     })
   }
 
   return byId
+}
+
+/** @deprecated Use fetchQuoteTaskContextsById */
+export async function fetchQuotesById(
+  conn: Connection,
+  quoteIds: string[],
+  lightningBase: string,
+): Promise<Map<string, PrimaryQuoteInfo>> {
+  const contexts = await fetchQuoteTaskContextsById(conn, quoteIds, lightningBase)
+  return new Map([...contexts.entries()].map(([id, ctx]) => [id, ctx]))
 }

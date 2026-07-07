@@ -6,7 +6,7 @@ import {
   isSendNnrTask,
   sfCaseUrl,
 } from '@/lib/sf-renewal-cases'
-import { fetchArQuotesByOpp, fetchQuotesById } from '@/lib/sf-primary-quote'
+import { fetchArQuotesByOpp, fetchQuoteTaskContextsById } from '@/lib/sf-primary-quote'
 import { isCancelArQuotesTask } from '@/lib/sf-task-routing'
 
 type SFTaskRecord = {
@@ -57,6 +57,10 @@ export async function GET(req: NextRequest) {
       oppUrl:   t.WhatId && t.What?.Type === 'Opportunity'
         ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view`
         : null,
+      relatedToName: t.What?.Name ?? null,
+      relatedToUrl: t.WhatId && t.What?.Type === 'Opportunity'
+        ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view`
+        : null,
       caseLink: null as { url: string; status: string } | null,
       quoteLink: null as { url: string; status: string; name: string } | null,
     }))
@@ -80,24 +84,42 @@ export async function GET(req: NextRequest) {
       fetchLatestCasesByOpp(conn, legalOppIds, '%Legal Review%'),
       fetchLatestCasesByOpp(conn, nnrOppIds, '%NNR%'),
       fetchArQuotesByOpp(conn, cancelArOppIds, instanceUrl),
-      fetchQuotesById(conn, cancelArQuoteIds, instanceUrl),
+      fetchQuoteTaskContextsById(conn, cancelArQuoteIds, instanceUrl),
     ])
 
     const tasks = baseTasks.map((t) => {
       if (!t.whatId) return t
 
       if (isCancelArQuotesTask(t.subject)) {
-        const quote = t.whatType === 'SBQQ__Quote__c'
-          ? quotesById.get(t.whatId)
-          : quotesByOpp.get(t.whatId)
-        if (quote) {
-          return {
-            ...t,
-            quoteLink: {
-              url: quote.quoteUrl,
-              status: quote.status ?? '—',
-              name: quote.quoteNumber ?? quote.name ?? t.whatName ?? 'AR Quote',
-            },
+        if (t.whatType === 'SBQQ__Quote__c') {
+          const quote = quotesById.get(t.whatId)
+          if (quote) {
+            const oppUrl = quote.oppId
+              ? `${instanceUrl}/lightning/r/Opportunity/${quote.oppId}/view`
+              : t.relatedToUrl
+            return {
+              ...t,
+              relatedToName: quote.oppName ?? t.relatedToName,
+              relatedToUrl: oppUrl,
+              oppUrl: oppUrl ?? t.oppUrl,
+              quoteLink: {
+                url: quote.quoteUrl,
+                status: quote.status ?? '—',
+                name: quote.quoteNumber ?? quote.name ?? 'AR Quote',
+              },
+            }
+          }
+        } else {
+          const quote = quotesByOpp.get(t.whatId)
+          if (quote) {
+            return {
+              ...t,
+              quoteLink: {
+                url: quote.quoteUrl,
+                status: quote.status ?? '—',
+                name: quote.quoteNumber ?? quote.name ?? 'AR Quote',
+              },
+            }
           }
         }
       }

@@ -17,6 +17,8 @@ type SFTask = {
   dueDate: string | null
   taskUrl: string
   oppUrl: string | null
+  relatedToName: string | null
+  relatedToUrl: string | null
   caseLink: { url: string; status: string } | null
   quoteLink: { url: string; status: string; name: string } | null
 }
@@ -198,7 +200,7 @@ export default function TasksPage() {
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[32%]">Related To</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[12%]">Priority</th>
                     <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]">Due Date</th>
-                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]"></th>
+                    <th className="text-left px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-[14%]">Agent</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -216,20 +218,14 @@ export default function TasksPage() {
 
                       {/* Related To */}
                       <td className="px-5 py-3.5">
-                        {task.quoteLink ? (
-                          <a href={task.quoteLink.url} target="_blank" rel="noopener noreferrer"
-                            className="text-purple-700 hover:underline flex items-center gap-1.5 group">
-                            <span className="line-clamp-2">{task.quoteLink.name}</span>
-                            <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </a>
-                        ) : task.whatName && task.oppUrl ? (
-                          <a href={task.oppUrl} target="_blank" rel="noopener noreferrer"
+                        {(task.relatedToName ?? task.whatName) && (task.relatedToUrl ?? task.oppUrl) ? (
+                          <a href={task.relatedToUrl ?? task.oppUrl!} target="_blank" rel="noopener noreferrer"
                             className="text-blue-600 hover:underline flex items-center gap-1.5 group">
-                            <span className="line-clamp-2">{task.whatName}</span>
+                            <span className="line-clamp-2">{task.relatedToName ?? task.whatName}</span>
                             <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </a>
-                        ) : task.whatName ? (
-                          <span className="line-clamp-2 text-gray-700">{task.whatName}</span>
+                        ) : (task.relatedToName ?? task.whatName) ? (
+                          <span className="line-clamp-2 text-gray-700">{task.relatedToName ?? task.whatName}</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
@@ -244,7 +240,7 @@ export default function TasksPage() {
                       {/* Smart action button */}
                       <td className="px-5 py-3.5">
                         {(() => {
-                          const action = getTaskAction(task.subject, task.whatName)
+                          const action = getTaskAction(task.subject, task.relatedToName ?? task.whatName)
                           if (!action) return task.quoteLink ? (
                             <QuoteLinkButton quoteLink={task.quoteLink} />
                           ) : task.caseLink ? (
