@@ -40,6 +40,9 @@ const QUOTE_REVIEW_FIELDS = [
   'SBQQ__PrimaryQuote__c',
   'SBQQ__PrimaryQuote__r.Name',
   'SBQQ__PrimaryQuote__r.SBQQ__Status__c',
+  'AR_Quote__c',
+  'AR_Quote__r.Name',
+  'AR_Quote__r.SBQQ__Status__c',
 ]
 
 const OPTIONAL_OPP_FIELDS = [
@@ -197,14 +200,25 @@ async function mapOpp(
 ) {
   const winType = (opp.Win_Type__c as string | null) ?? null
   const product = (opp.Product__c as string | null) ?? null
-  const primaryQuoteId = (opp.SBQQ__PrimaryQuote__c as string | null) ?? null
+  const isAutoRenew = winType === 'Auto-Renew'
+
+  const arQuoteId = (opp.AR_Quote__c as string | null) ?? null
+  const arQuoteRel = opp.AR_Quote__r as {
+    Name?: string
+    SBQQ__Status__c?: string | null
+  } | null | undefined
+
+  const primaryQuoteIdField = (opp.SBQQ__PrimaryQuote__c as string | null) ?? null
   const primaryQuoteRel = opp.SBQQ__PrimaryQuote__r as {
     Name?: string
     SBQQ__Status__c?: string | null
   } | null | undefined
-  const primaryQuoteStatusHint = primaryQuoteRel?.SBQQ__Status__c ?? null
 
-  const quoteLines = primaryQuoteId ? await fetchQuoteLines(conn, primaryQuoteId) : []
+  const reviewQuoteId = isAutoRenew ? arQuoteId : primaryQuoteIdField
+  const reviewQuoteRel = isAutoRenew ? arQuoteRel : primaryQuoteRel
+  const reviewQuoteStatusHint = reviewQuoteRel?.SBQQ__Status__c ?? null
+
+  const quoteLines = reviewQuoteId ? await fetchQuoteLines(conn, reviewQuoteId) : []
   const supportFromQuote = parseSupportPlanFromLines(quoteLines)
   const usersFromQuote = parseUserCountFromLines(quoteLines, product)
 
@@ -213,14 +227,14 @@ async function mapOpp(
 
   const contact = await bestContact(conn, opp.Id)
 
-  const primaryQuote = primaryQuoteId
-    ? await fetchPrimaryQuoteInfo(conn, primaryQuoteId, lightningBase, primaryQuoteStatusHint)
+  const primaryQuote = reviewQuoteId
+    ? await fetchPrimaryQuoteInfo(conn, reviewQuoteId, lightningBase, reviewQuoteStatusHint)
     : null
 
   const primaryQuoteStatus =
-    primaryQuote?.status ?? primaryQuoteStatusHint ?? null
+    primaryQuote?.status ?? reviewQuoteStatusHint ?? null
   const primaryQuoteNumber =
-    primaryQuote?.quoteNumber ?? primaryQuoteRel?.Name ?? null
+    primaryQuote?.quoteNumber ?? reviewQuoteRel?.Name ?? null
 
   const signedQuoteUrl = extractUrlFromSfField(opp.Signed_Quote__c)
   const purchaseOrderLink = extractUrlFromSfField(opp.Purchase_Order_Link__c)
@@ -249,7 +263,7 @@ async function mapOpp(
     purchaseOrderRequirement:
       purchaseOrderRequirement != null ? String(purchaseOrderRequirement) : null,
     comparePo: reviewPlan.comparePo,
-    primaryQuoteId,
+    primaryQuoteId: reviewQuoteId,
     primaryQuoteStatus,
     primaryQuoteNumber,
     primaryQuoteUrl: primaryQuote?.quoteUrl ?? null,

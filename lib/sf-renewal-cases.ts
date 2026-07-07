@@ -52,6 +52,10 @@ export function sfCaseUrl(instanceUrl: string, caseId: string): string {
   return `${instanceUrl}/lightning/r/Case/${caseId}/view`
 }
 
+export function sfQuoteUrl(instanceUrl: string, quoteId: string): string {
+  return `${instanceUrl}/lightning/r/SBQQ__Quote__c/${quoteId}/view`
+}
+
 export function isLegalCaseStatusTask(subject: string): boolean {
   return subject.toLowerCase().includes('update legal case status')
 }

@@ -107,7 +107,7 @@ export function resolveQuoteReviewMode(input: {
       mode: 'auto-renew',
       title: 'Auto-Renew — provisioning from AR quote',
       description:
-        'Customer is auto-renewing — no signed quote or PO. Primary quote (AR) should be Out for Signature. Read the unsigned quote PDF from the primary quote Notes & Attachments and create a provisioning ticket from that document.',
+        'Customer is auto-renewing — no signed quote or PO. AR quote should be Out for Signature. Read the unsigned quote PDF from the AR quote Notes & Attachments and create a provisioning ticket from that document.',
       requiresUnsigned: true,
       requiresSigned: false,
       requiresPo: false,

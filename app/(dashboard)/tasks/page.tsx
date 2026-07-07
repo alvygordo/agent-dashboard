@@ -5,17 +5,20 @@ import { ExternalLink, RefreshCw, Play, Loader2, AlertCircle, Gem, Zap } from "l
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { theme } from "@/lib/theme"
+import { getTaskWorkflowAction } from "@/lib/sf-task-routing"
 
 type SFTask = {
   id: string
   subject: string
   whatId: string | null
   whatName: string | null
+  whatType: string | null
   priority: string
   dueDate: string | null
   taskUrl: string
   oppUrl: string | null
   caseLink: { url: string; status: string } | null
+  quoteLink: { url: string; status: string; name: string } | null
 }
 
 const KHOROS_GEM_URL    = "https://gemini.google.com/gem/2cc0ea7b4320"
@@ -23,7 +26,7 @@ const UNBLOCKER_URL     = "https://trilogy-core-renewals-sales-ops.vercel.app/"
 
 type TaskAction =
   | { type: "copilot"; oppName: string }
-  | { type: "sq-reviewer"; oppName: string }
+  | { type: "sq-reviewer"; oppName: string; label: "SQ Reviewer" | "Provisioning" }
   | { type: "gem";     url: string; label: string }
   | { type: "agent";   url: string; label: string }
 
@@ -31,22 +34,12 @@ function getTaskAction(subject: string, whatName: string | null): TaskAction | n
   const sub = subject.toLowerCase()
   const rel = (whatName ?? "").toLowerCase()
 
+  const workflow = getTaskWorkflowAction(subject, whatName)
+  if (workflow) return workflow
+
   // HVO / Non-HVO Opp Prep → Co-Pilot
   if (sub.includes("hvo opp prep")) {
     return { type: "copilot", oppName: whatName ?? subject }
-  }
-
-  // Auto-Renew provisioning ticket → SQ Reviewer
-  if (
-    sub.includes("provisioning ticket")
-    && sub.includes("auto renewal")
-  ) {
-    return { type: "sq-reviewer", oppName: whatName ?? subject }
-  }
-
-  // Signed Quote Review → SQ Reviewer
-  if (sub.includes("signed quote review")) {
-    return { type: "sq-reviewer", oppName: whatName ?? subject }
   }
 
   // Khoros + license/provisioning → Instance Extractor Gem
@@ -90,6 +83,18 @@ function CaseLinkButton({ caseLink }: { caseLink: { url: string; status: string 
         {caseLink.status || "Open"}
       </Badge>
       <ExternalLink className="w-3 h-3 text-blue-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+    </a>
+  )
+}
+
+function QuoteLinkButton({ quoteLink }: { quoteLink: { url: string; status: string; name: string } }) {
+  return (
+    <a href={quoteLink.url} target="_blank" rel="noopener noreferrer"
+      className="inline-flex items-center gap-1.5 group">
+      <Badge className="bg-purple-50 text-purple-700 border-purple-200 font-medium hover:bg-purple-100 transition-colors">
+        {quoteLink.status || "—"}
+      </Badge>
+      <ExternalLink className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
     </a>
   )
 }
@@ -211,12 +216,20 @@ export default function TasksPage() {
 
                       {/* Related To */}
                       <td className="px-5 py-3.5">
-                        {task.whatName && task.oppUrl ? (
+                        {task.quoteLink ? (
+                          <a href={task.quoteLink.url} target="_blank" rel="noopener noreferrer"
+                            className="text-purple-700 hover:underline flex items-center gap-1.5 group">
+                            <span className="line-clamp-2">{task.quoteLink.name}</span>
+                            <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </a>
+                        ) : task.whatName && task.oppUrl ? (
                           <a href={task.oppUrl} target="_blank" rel="noopener noreferrer"
                             className="text-blue-600 hover:underline flex items-center gap-1.5 group">
                             <span className="line-clamp-2">{task.whatName}</span>
                             <ExternalLink className="w-3 h-3 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
                           </a>
+                        ) : task.whatName ? (
+                          <span className="line-clamp-2 text-gray-700">{task.whatName}</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
@@ -232,7 +245,9 @@ export default function TasksPage() {
                       <td className="px-5 py-3.5">
                         {(() => {
                           const action = getTaskAction(task.subject, task.whatName)
-                          if (!action) return task.caseLink ? (
+                          if (!action) return task.quoteLink ? (
+                            <QuoteLinkButton quoteLink={task.quoteLink} />
+                          ) : task.caseLink ? (
                             <CaseLinkButton caseLink={task.caseLink} />
                           ) : task.oppUrl ? (
                             <a href={task.oppUrl} target="_blank" rel="noopener noreferrer">
@@ -251,7 +266,7 @@ export default function TasksPage() {
                           if (action.type === "sq-reviewer") return (
                             <Button size="sm" onClick={() => handleAction(action)}
                               className={`${accentBg} text-white hover:opacity-90 cursor-pointer gap-1.5 text-xs font-medium`}>
-                              <Play className="w-3 h-3" /> SQ Reviewer
+                              <Play className="w-3 h-3" /> {action.label}
                             </Button>
                           )
                           if (action.type === "gem") return (

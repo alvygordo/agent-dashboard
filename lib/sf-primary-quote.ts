@@ -117,3 +117,82 @@ export async function fetchPrimaryQuoteInfo(
     unsignedAttachmentTitle: attachments.title,
   }
 }
+
+type OppArQuoteRow = {
+  Id: string
+  AR_Quote__c: string | null
+  AR_Quote__r?: {
+    Name?: string | null
+    SBQQ__Status__c?: string | null
+  } | null
+}
+
+/** AR Quote on the opportunity (`AR_Quote__c`) — not the CPQ primary quote. */
+export async function fetchArQuotesByOpp(
+  conn: Connection,
+  oppIds: string[],
+  lightningBase: string,
+): Promise<Map<string, PrimaryQuoteInfo>> {
+  const uniqueIds = [...new Set(oppIds.filter(Boolean))]
+  if (uniqueIds.length === 0) return new Map()
+
+  const inClause = uniqueIds.map((id) => `'${id.replace(/'/g, "\\'")}'`).join(',')
+  const result = await conn.query<OppArQuoteRow>(
+    `SELECT Id, AR_Quote__c,
+            AR_Quote__r.Name,
+            AR_Quote__r.SBQQ__Status__c
+     FROM Opportunity
+     WHERE Id IN (${inClause})
+     AND AR_Quote__c != null`,
+  )
+
+  const byOpp = new Map<string, PrimaryQuoteInfo>()
+  for (const row of result.records) {
+    const quoteId = row.AR_Quote__c
+    if (!quoteId) continue
+    const name = row.AR_Quote__r?.Name ?? null
+    byOpp.set(row.Id, {
+      id: quoteId,
+      name,
+      quoteNumber: name,
+      status: row.AR_Quote__r?.SBQQ__Status__c ?? null,
+      quoteUrl: `${lightningBase}/lightning/r/SBQQ__Quote__c/${quoteId}/view`,
+      unsignedAttachmentUrl: null,
+      unsignedAttachmentTitle: null,
+    })
+  }
+
+  return byOpp
+}
+
+/** CPQ quotes by Id (for Cancel AR Quotes tasks linked directly to SBQQ__Quote__c). */
+export async function fetchQuotesById(
+  conn: Connection,
+  quoteIds: string[],
+  lightningBase: string,
+): Promise<Map<string, PrimaryQuoteInfo>> {
+  const uniqueIds = [...new Set(quoteIds.filter(Boolean))]
+  if (uniqueIds.length === 0) return new Map()
+
+  const inClause = uniqueIds.map((id) => `'${id.replace(/'/g, "\\'")}'`).join(',')
+  const result = await conn.query<QuoteRow>(
+    `SELECT Id, Name, SBQQ__Status__c
+     FROM SBQQ__Quote__c
+     WHERE Id IN (${inClause})`,
+  )
+
+  const byId = new Map<string, PrimaryQuoteInfo>()
+  for (const row of result.records) {
+    byId.set(row.Id, {
+      id: row.Id,
+      name: row.Name ?? null,
+      quoteNumber: row.Name ?? null,
+      status: row.SBQQ__Status__c ?? null,
+      quoteUrl: `${lightningBase}/lightning/r/SBQQ__Quote__c/${row.Id}/view`,
+      unsignedAttachmentUrl: null,
+      unsignedAttachmentTitle: null,
+    })
+  }
+
+  return byId
+}

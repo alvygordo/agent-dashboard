@@ -649,7 +649,9 @@ function SignedQuoteReviewerInner() {
                 </p>
                 {oppData.primaryQuoteId && (
                   <p className="text-gray-700">
-                    <span className="font-medium">Primary quote status:</span>{" "}
+                    <span className="font-medium">
+                      {reviewPlan.mode === "auto-renew" ? "AR quote status:" : "Primary quote status:"}
+                    </span>{" "}
                     {oppData.primaryQuoteStatus ?? "—"}
                     {oppData.primaryQuoteNumber ? ` (${oppData.primaryQuoteNumber})` : ""}
                   </p>
@@ -678,7 +680,8 @@ function SignedQuoteReviewerInner() {
                     rel="noopener noreferrer"
                     className={`inline-flex items-center gap-1 text-xs ${theme.accent} hover:underline ml-3`}
                   >
-                    Open primary quote <ExternalLink className="w-3 h-3" />
+                    {reviewPlan.mode === "auto-renew" ? "Open AR quote" : "Open primary quote"}{" "}
+                    <ExternalLink className="w-3 h-3" />
                   </a>
                 )}
               </div>
@@ -695,7 +698,7 @@ function SignedQuoteReviewerInner() {
                       onChange={(e) => setDocs((d) => ({ ...d, unsignedQuoteUrl: e.target.value }))}
                       placeholder={
                         reviewPlan.mode === "auto-renew"
-                          ? "From primary quote → Related → Notes & Attachments (unsigned AR quote PDF)"
+                          ? "From AR quote → Related → Notes & Attachments (unsigned AR quote PDF)"
                           : "From primary quote → Notes & Attachments"
                       }
                       className={`w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 ${theme.inputFocus}`}

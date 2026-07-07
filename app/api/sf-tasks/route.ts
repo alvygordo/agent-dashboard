@@ -6,12 +6,14 @@ import {
   isSendNnrTask,
   sfCaseUrl,
 } from '@/lib/sf-renewal-cases'
+import { fetchArQuotesByOpp, fetchQuotesById } from '@/lib/sf-primary-quote'
+import { isCancelArQuotesTask } from '@/lib/sf-task-routing'
 
 type SFTaskRecord = {
   Id: string
   Subject: string
   WhatId: string | null
-  What: { Name: string } | null
+  What: { Name: string; Type: string } | null
   Priority: string
   ActivityDate: string | null
 }
@@ -35,7 +37,7 @@ export async function GET(req: NextRequest) {
 
     const safeEmail = email.replace(/'/g, "\\'")
     const result = await conn.query<SFTaskRecord>(
-      `SELECT Id, Subject, WhatId, What.Name, Priority, ActivityDate
+      `SELECT Id, Subject, WhatId, What.Name, What.Type, Priority, ActivityDate
        FROM Task
        WHERE IsClosed = false
        AND Owner.Email = '${safeEmail}'
@@ -48,11 +50,15 @@ export async function GET(req: NextRequest) {
       subject:  t.Subject,
       whatId:   t.WhatId ?? null,
       whatName: t.What?.Name ?? null,
+      whatType: t.What?.Type ?? null,
       priority: t.Priority,
       dueDate:  t.ActivityDate,
       taskUrl:  `${instanceUrl}/lightning/r/Task/${t.Id}/view`,
-      oppUrl:   t.WhatId ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view` : null,
+      oppUrl:   t.WhatId && t.What?.Type === 'Opportunity'
+        ? `${instanceUrl}/lightning/r/Opportunity/${t.WhatId}/view`
+        : null,
       caseLink: null as { url: string; status: string } | null,
+      quoteLink: null as { url: string; status: string; name: string } | null,
     }))
 
     const legalOppIds = baseTasks
@@ -62,13 +68,39 @@ export async function GET(req: NextRequest) {
       .filter((t) => isSendNnrTask(t.subject) && t.whatId)
       .map((t) => t.whatId!)
 
-    const [legalCases, nnrCases] = await Promise.all([
+    const cancelArTasks = baseTasks.filter((t) => isCancelArQuotesTask(t.subject) && t.whatId)
+    const cancelArOppIds = cancelArTasks
+      .filter((t) => t.whatType === 'Opportunity')
+      .map((t) => t.whatId!)
+    const cancelArQuoteIds = cancelArTasks
+      .filter((t) => t.whatType === 'SBQQ__Quote__c')
+      .map((t) => t.whatId!)
+
+    const [legalCases, nnrCases, quotesByOpp, quotesById] = await Promise.all([
       fetchLatestCasesByOpp(conn, legalOppIds, '%Legal Review%'),
       fetchLatestCasesByOpp(conn, nnrOppIds, '%NNR%'),
+      fetchArQuotesByOpp(conn, cancelArOppIds, instanceUrl),
+      fetchQuotesById(conn, cancelArQuoteIds, instanceUrl),
     ])
 
     const tasks = baseTasks.map((t) => {
       if (!t.whatId) return t
+
+      if (isCancelArQuotesTask(t.subject)) {
+        const quote = t.whatType === 'SBQQ__Quote__c'
+          ? quotesById.get(t.whatId)
+          : quotesByOpp.get(t.whatId)
+        if (quote) {
+          return {
+            ...t,
+            quoteLink: {
+              url: quote.quoteUrl,
+              status: quote.status ?? '—',
+              name: quote.quoteNumber ?? quote.name ?? t.whatName ?? 'AR Quote',
+            },
+          }
+        }
+      }
 
       if (isLegalCaseStatusTask(t.subject)) {
         const legalCase = legalCases.get(t.whatId)
