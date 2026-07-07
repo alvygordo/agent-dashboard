@@ -59,7 +59,7 @@ const KNOWN_PRODUCTS = [
   'CloudSense', 'Cloudsense', 'DevOps Platform', 'DevOpsPlatform', 'Khoros',
   'AnswerHub', 'Exceed', 'Bold360', 'ACME', 'Pivotal',
 ]
-const KNOWN_SUPPLIERS = ['Skyvera', 'Trilogy', 'Aurea', 'GFI', 'Versata', 'IgniteTech']
+const KNOWN_SUPPLIERS = ['Skyvera', 'Trilogy', 'Aurea', 'GFI', 'Versata', 'IgniteTech', 'CopperTree']
 const GARBAGE_VALUES = /^(item description|unit price|confidential|prepared|security|english|payment termsnet|amount|qty|quantity|description|total|subtotal|revised|quote|date|s:|n\/a|reference)$/i
 
 const QUOTE_NUMBER_REJECT = new Set([
@@ -364,22 +364,71 @@ const SUPPLIER_LABELS = [
   'Supplier Name',
   'Vendor',
   'Sold By',
+  'Contracting Party',
+  'Legal Entity',
 ]
+
+const SUPPLIER_NEXT_LINE_REJECT = /^(bill to|ship to|customer name|customer|end user|payment terms|payment|term start|term end|term duration|quote number|prepared|date|reference|item code|qty|quantity|total fee|total|for customer|for service provider|subscription)/i
+
+function isSignatureServiceProviderContext(text: string, matchIndex: number): boolean {
+  const before = text.slice(Math.max(0, matchIndex - 24), matchIndex)
+  return /\bfor\s+$/i.test(before)
+}
+
+function isSupplierFieldLabel(value: string): boolean {
+  return SUPPLIER_NEXT_LINE_REJECT.test(value.trim())
+}
+
+function extractSupplierCompanyFromLabelWindow(text: string, labelStart: number, labelLength: number): string | null {
+  const window = text.slice(labelStart, labelStart + 320)
+  const after = window.slice(labelLength)
+
+  const inline = after.match(/^\s*:?\s*([A-Za-z][A-Za-z0-9\s&.,'-]{2,70})/)
+  if (inline?.[1]) {
+    const v = normalizeSupplierName(inline[1])
+    if (v && !isSupplierFieldLabel(v)) return v
+  }
+
+  const lines = after.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+  for (const line of lines.slice(0, 4)) {
+    if (isSupplierFieldLabel(line)) continue
+    const v = normalizeSupplierName(line)
+    if (v) return v
+  }
+
+  return null
+}
+
+function extractSupplierFromLabels(text: string): string | null {
+  for (const label of SUPPLIER_LABELS) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const labelRe = new RegExp(escaped, 'gi')
+    for (const match of text.matchAll(labelRe)) {
+      if (match.index == null) continue
+      if (isSignatureServiceProviderContext(text, match.index)) continue
+      const company = extractSupplierCompanyFromLabelWindow(text, match.index, match[0].length)
+      if (company) return company
+    }
+  }
+  return null
+}
 
 function extractKnownSupplierNearLabel(text: string): string | null {
   for (const label of SUPPLIER_LABELS) {
     const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    const labelRe = new RegExp(escaped, 'i')
-    const match = labelRe.exec(text)
-    if (!match || match.index == null) continue
+    const labelRe = new RegExp(escaped, 'gi')
+    for (const match of text.matchAll(labelRe)) {
+      if (match.index == null) continue
+      if (isSignatureServiceProviderContext(text, match.index)) continue
 
-    const window = text.slice(match.index, match.index + 220)
-    for (const name of KNOWN_SUPPLIERS) {
-      const nameRe = new RegExp(`\\b${name}\\b`, 'i')
-      const nameMatch = nameRe.exec(window)
-      if (!nameMatch || nameMatch.index == null) continue
-      if (isKnownSupplierFalsePositive(name, window, nameMatch.index)) continue
-      return name
+      const window = text.slice(match.index, match.index + 260)
+      for (const name of KNOWN_SUPPLIERS) {
+        const nameRe = new RegExp(`\\b${name}\\b`, 'i')
+        const nameMatch = nameRe.exec(window)
+        if (!nameMatch || nameMatch.index == null) continue
+        if (isKnownSupplierFalsePositive(name, window, nameMatch.index)) continue
+        return name
+      }
     }
   }
   return null
@@ -1093,15 +1142,15 @@ function extractSupplier(
   mirrorSupplier?: string | null,
   pageTexts?: string[],
 ): string | null {
-  const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
-  const scopes = [headerScope, text.slice(0, 12_000)]
+  const scopes = [
+    ...(pageTexts?.slice(0, 4) ?? []),
+    pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 6000),
+    text.slice(0, 20_000),
+  ].filter((scope, index, all) => Boolean(scope) && all.indexOf(scope) === index)
 
   for (const scope of scopes) {
-    const inlineBlock = scope.match(
-      /Service\s*Provider\s*:?\s*\n?\s*([A-Z][A-Za-z0-9\s&.,'-]{2,50})/i,
-    )
-    const fromBlock = normalizeSupplierName(inlineBlock?.[1])
-    if (fromBlock) return fromBlock
+    const fromLabels = extractSupplierFromLabels(scope)
+    if (fromLabels) return fromLabels
 
     const onNextLine = normalizeSupplierName(extractLabeledValueOnNextLine(scope, SUPPLIER_LABELS))
     if (onNextLine) return onNextLine
