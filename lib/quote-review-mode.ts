@@ -66,6 +66,11 @@ export function usesUnsignedQuoteBaseline(mode: QuoteReviewMode): boolean {
   return mode === 'po-received' || mode === 'auto-renew'
 }
 
+/** PDF source of truth for term start/end dates and service provider. */
+export function quoteTermBaselineDoc(mode: QuoteReviewMode): 'unsigned' | 'signed' {
+  return usesUnsignedQuoteBaseline(mode) ? 'unsigned' : 'signed'
+}
+
 export function resolveQuoteReviewMode(input: {
   winType: string | null | undefined
   primaryQuoteStatus: string | null | undefined

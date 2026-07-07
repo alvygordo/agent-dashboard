@@ -334,6 +334,64 @@ function extractAfterLabels(text: string, labels: string[]): string | null {
   return null
 }
 
+function extractLabeledValueOnNextLine(text: string, labels: string[]): string | null {
+  for (const label of labels) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(
+      `${escaped}\\s*:?(?:\\s+|\\n+)([A-Z][A-Za-z0-9\\s&.,'-]{2,60})`,
+      'i',
+    )
+    const m = text.match(re)
+    if (m?.[1]) {
+      const val = cleanExtracted(m[1].split(/[,(\n]/)[0]?.trim())
+      if (val) return val
+    }
+  }
+  return null
+}
+
+function normalizeSupplierName(value: string | null | undefined): string | null {
+  if (!value) return null
+  const company = value.split(/[,(\n]/)[0]?.trim() ?? ''
+  if (!company || GARBAGE_VALUES.test(company) || isSupplierGarbage(company)) return null
+  return company
+}
+
+const SUPPLIER_LABELS = [
+  'Service Provider',
+  'Service Provider Name',
+  'Supplier',
+  'Supplier Name',
+  'Vendor',
+  'Sold By',
+]
+
+function extractKnownSupplierNearLabel(text: string): string | null {
+  for (const label of SUPPLIER_LABELS) {
+    const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const labelRe = new RegExp(escaped, 'i')
+    const match = labelRe.exec(text)
+    if (!match || match.index == null) continue
+
+    const window = text.slice(match.index, match.index + 220)
+    for (const name of KNOWN_SUPPLIERS) {
+      const nameRe = new RegExp(`\\b${name}\\b`, 'i')
+      const nameMatch = nameRe.exec(window)
+      if (!nameMatch || nameMatch.index == null) continue
+      if (isKnownSupplierFalsePositive(name, window, nameMatch.index)) continue
+      return name
+    }
+  }
+  return null
+}
+
+function isKnownSupplierFalsePositive(name: string, text: string, matchIndex: number): boolean {
+  const context = text.slice(Math.max(0, matchIndex - 24), matchIndex + name.length + 40)
+  if (/Aurea\s*::|::\s*AEM|::\s*Lyris|\bLyris\b/i.test(context)) return true
+  if (/\bfor\s+service\s+provider\b/i.test(context)) return true
+  return false
+}
+
 function extractCustomerName(
   text: string,
   pageTexts?: string[],
@@ -1036,34 +1094,28 @@ function extractSupplier(
   pageTexts?: string[],
 ): string | null {
   const headerScope = pageTexts?.slice(0, 2).join('\n') ?? text.slice(0, 4000)
+  const scopes = [headerScope, text.slice(0, 12_000)]
 
-  const providerBlock = headerScope.match(
-    /Service\s*Provider\s*:?\s*\n?\s*([A-Z][A-Za-z0-9\s&.,'-]{2,50})/i,
-  )
-  if (providerBlock?.[1]) {
-    const company = providerBlock[1].split(/[,(\n]/)[0]?.trim()
-    if (company && !isSupplierGarbage(company)) return company
-  }
+  for (const scope of scopes) {
+    const inlineBlock = scope.match(
+      /Service\s*Provider\s*:?\s*\n?\s*([A-Z][A-Za-z0-9\s&.,'-]{2,50})/i,
+    )
+    const fromBlock = normalizeSupplierName(inlineBlock?.[1])
+    if (fromBlock) return fromBlock
 
-  for (const name of KNOWN_SUPPLIERS) {
-    if (new RegExp(`\\b${name}\\b`, 'i').test(headerScope)) return name
-  }
+    const onNextLine = normalizeSupplierName(extractLabeledValueOnNextLine(scope, SUPPLIER_LABELS))
+    if (onNextLine) return onNextLine
 
-  const labeled = extractAfterLabels(headerScope, [
-    'Service Provider', 'Service Provider Name', 'Supplier', 'Supplier Name', 'Vendor', 'Sold By',
-  ])
-  if (labeled) {
-    const company = labeled.split(/[,(\n]/)[0]?.trim()
-    if (company && !GARBAGE_VALUES.test(company) && !isSupplierGarbage(company)) return company
+    const inline = normalizeSupplierName(extractAfterLabels(scope, SUPPLIER_LABELS))
+    if (inline) return inline
+
+    const nearLabel = extractKnownSupplierNearLabel(scope)
+    if (nearLabel) return nearLabel
   }
 
   if (mirrorSupplier) {
     const escaped = mirrorSupplier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     if (new RegExp(escaped, 'i').test(text)) return mirrorSupplier
-  }
-
-  for (const name of KNOWN_SUPPLIERS) {
-    if (new RegExp(`\\b${name}\\b`, 'i').test(text)) return name
   }
 
   return null
@@ -1296,7 +1348,10 @@ export function sanitizeQuoteFields(
   fields: ExtractedDocumentFields,
   unsignedFields: ExtractedDocumentFields | null,
   hints: QuoteFieldHints,
+  options?: { documentOnlyTermFields?: boolean },
 ): ExtractedDocumentFields {
+  const documentOnlyTermFields = options?.documentOnlyTermFields ?? false
+
   function pick(
     extracted: string | null,
     unsigned: string | null | undefined,
@@ -1327,9 +1382,18 @@ export function sanitizeQuoteFields(
     endUserName: pick(fields.endUserName, unsignedFields?.endUserName, hints.accountName ?? null, isPlausiblePartyName),
     supportPlan: pick(fields.supportPlan, unsignedFields?.supportPlan, hints.supportPlan ?? null, isPlausibleSupportPlan),
     paymentTerms,
-    renewalDate: fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null,
-    expiryDate: fields.expiryDate ?? unsignedFields?.expiryDate ?? null,
-    term: fields.term ?? unsignedFields?.term ?? null,
+    renewalDate: documentOnlyTermFields
+      ? (fields.renewalDate ?? null)
+      : (fields.renewalDate ?? unsignedFields?.renewalDate ?? hints.renewalDate ?? null),
+    expiryDate: documentOnlyTermFields
+      ? (fields.expiryDate ?? null)
+      : (fields.expiryDate ?? unsignedFields?.expiryDate ?? null),
+    term: documentOnlyTermFields
+      ? (fields.term ?? null)
+      : (fields.term ?? unsignedFields?.term ?? null),
+    supplierName: documentOnlyTermFields
+      ? (fields.supplierName ?? null)
+      : fields.supplierName,
   })
 }
 

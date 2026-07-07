@@ -117,7 +117,9 @@ export async function POST(req: NextRequest) {
     const accountNameHint = body.salesforce.accountName
     const supportPlanHint = body.salesforce.supportPlan
 
-    const skipSfDateHints = mode === 'auto-renew'
+    const skipSfDateHints = usesUnsignedQuoteBaseline(mode)
+    const skipSignedSfDateHints =
+      mode === 'quote-signed-adobe' || mode === 'quote-signed-manual'
 
     const unsignedResult = needsUnsigned && body.unsignedQuoteUrl?.trim()
       ? await analyzeUrl(conn, body.unsignedQuoteUrl, 'quote', {
@@ -140,7 +142,7 @@ export async function POST(req: NextRequest) {
       ? await analyzeUrl(conn, body.signedQuoteUrl, 'quote', {
           productHint: signedProductHint,
           docKind: 'quote',
-          termHint,
+          termHint: skipSignedSfDateHints ? undefined : termHint,
           expectedTotal: unsignedResult.doc?.fields.totalAmount ?? arrHint,
           quoteNumberHint:
             unsignedResult.doc?.fields.quoteNumber
@@ -149,7 +151,8 @@ export async function POST(req: NextRequest) {
           quantityHint,
           accountNameHint,
           supportPlanHint,
-          renewalDateHint: body.salesforce.renewalDate,
+          renewalDateHint: skipSignedSfDateHints ? undefined : body.salesforce.renewalDate,
+          expiryDateHint: skipSignedSfDateHints ? undefined : body.salesforce.expiryDate,
         })
       : { doc: null, error: null }
 

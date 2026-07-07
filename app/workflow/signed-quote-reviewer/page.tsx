@@ -20,7 +20,7 @@ import type { DocumentAnalysisBundle } from "@/lib/quote-alignment"
 import { resolveQuoteNumber } from "@/lib/quote-alignment"
 import { formatQuoteDateDisplay, resolveProvisioningDates } from "@/lib/quote-field-extract"
 import type { QuoteReviewMode } from "@/lib/quote-review-mode"
-import { resolveQuoteReviewMode } from "@/lib/quote-review-mode"
+import { resolveQuoteReviewMode, usesUnsignedQuoteBaseline } from "@/lib/quote-review-mode"
 import { findHelpCenterForProduct } from "@/lib/product-help-centers"
 import {
   ArrowRight,
@@ -121,25 +121,13 @@ const STEP_COUNT = STEPS.length
 
 function quoteFieldsForTemplate(docAnalysis?: DocumentAnalysisBundle | null) {
   if (!docAnalysis) return null
-  if (docAnalysis.analysisMode === "po-received" || docAnalysis.analysisMode === "auto-renew") {
+  if (usesUnsignedQuoteBaseline(docAnalysis.analysisMode)) {
     return docAnalysis.unsigned?.fields ?? docAnalysis.signed?.fields ?? null
   }
   return docAnalysis.signed?.fields ?? docAnalysis.unsigned?.fields ?? null
 }
 
-function usesUnsignedTemplateFields(
-  opp: OppData,
-  docAnalysis?: DocumentAnalysisBundle | null,
-): boolean {
-  return (
-    opp.winType === "Auto-Renew"
-    || opp.winType === "PO Received"
-    || docAnalysis?.analysisMode === "auto-renew"
-    || docAnalysis?.analysisMode === "po-received"
-  )
-}
-
-function arQuoteProvisioningReference(
+function quoteBaselineProvisioningReference(
   opp: OppData,
   docAnalysis?: DocumentAnalysisBundle | null,
 ): { field: string; value: string }[] {
@@ -158,16 +146,20 @@ function arQuoteProvisioningReference(
       value: quoteFields?.quantity ?? (opp.userCount != null ? String(opp.userCount) : "—"),
     },
     {
-      field: "Renewal date",
+      field: "Renewal date (term start)",
       value: formatQuoteDateDisplay(provisioned.renewalDate ?? quoteFields?.renewalDate),
     },
     {
-      field: "Expiry date",
+      field: "Expiry date (term end)",
       value: formatQuoteDateDisplay(provisioned.expiryDate),
     },
     {
       field: "Term duration",
       value: quoteFields?.term ? formatTermLabel(quoteFields.term) : "—",
+    },
+    {
+      field: "Service provider",
+      value: quoteFields?.supplierName ?? "—",
     },
     {
       field: "Primary contact",
@@ -190,37 +182,17 @@ function buildProvisioningTemplate(
   opp: OppData,
   docAnalysis?: DocumentAnalysisBundle | null,
 ): string {
-  const unsignedFirst = usesUnsignedTemplateFields(opp, docAnalysis)
-  const isAutoRenew =
-    opp.winType === "Auto-Renew"
-    || docAnalysis?.analysisMode === "auto-renew"
   const quoteFields = quoteFieldsForTemplate(docAnalysis)
-  const signedFields = docAnalysis?.signed?.fields ?? null
-  const unsignedFields = docAnalysis?.unsigned?.fields ?? null
-  const termSource = isAutoRenew
-    ? (quoteFields?.term ?? null)
-    : (
-      quoteFields?.term
-      ?? (unsignedFirst ? unsignedFields?.term : signedFields?.term)
-      ?? unsignedFields?.term
-      ?? signedFields?.term
-      ?? opp.currentTerm
-    )
+  const termSource = quoteFields?.term ?? null
   const months = formatTermMonthsOnly(termSource)
   const termLabel = formatTermLabel(termSource)
   const product = opp.product ?? "[Insert Product Name]"
   const contact = opp.primaryContact?.display ?? formatContactLine(opp.primaryContact)
   const nsLink = opp.netSuiteSubLink ?? "[Insert NetSuite Link]"
-  const renewalRaw = isAutoRenew
-    ? (quoteFields?.renewalDate ?? null)
-    : unsignedFirst
-      ? (quoteFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
-      : (signedFields?.renewalDate ?? unsignedFields?.renewalDate ?? opp.renewalDate)
+  const renewalRaw = quoteFields?.renewalDate ?? null
   const provisioned = resolveProvisioningDates({
     renewalDate: renewalRaw,
-    extractedExpiry: isAutoRenew
-      ? quoteFields?.expiryDate
-      : (quoteFields?.expiryDate ?? unsignedFields?.expiryDate ?? signedFields?.expiryDate),
+    extractedExpiry: quoteFields?.expiryDate,
     term: termSource,
   })
   const renewal = formatQuoteDateDisplay(provisioned.renewalDate ?? renewalRaw)
@@ -524,12 +496,12 @@ function SignedQuoteReviewerInner() {
     : null
   const helpCenter = oppData ? findHelpCenterForProduct(oppData.product) : null
   const template = oppData ? buildProvisioningTemplate(oppData, docAnalysis) : ""
-  const isAutoRenewTemplate =
-    oppData?.winType === "Auto-Renew"
-    || docAnalysis?.analysisMode === "auto-renew"
-  const provisioningReferenceRows = isAutoRenewTemplate && oppData
-    ? arQuoteProvisioningReference(oppData, docAnalysis)
+  const provisioningReferenceRows = oppData && docAnalysis
+    ? quoteBaselineProvisioningReference(oppData, docAnalysis)
     : null
+  const provisioningSourceLabel = docAnalysis?.analysisMode && usesUnsignedQuoteBaseline(docAnalysis.analysisMode)
+    ? (docAnalysis.analysisMode === "auto-renew" ? "AR quote" : "unsigned quote")
+    : "signed quote"
 
   return (
     <div className="flex flex-col h-screen bg-gray-50">
@@ -854,8 +826,8 @@ function SignedQuoteReviewerInner() {
               <Badge className={`${theme.stepBadge} mb-3`}>Step 4 of {STEP_COUNT}</Badge>
               <h2 className="text-2xl font-bold text-gray-900">Provisioning Template</h2>
               <p className="text-sm text-gray-500 mt-1">
-                {isAutoRenewTemplate
-                  ? "Copy the template below for provisioning. Auto-Renew renewals use the unsigned AR quote PDF as the source of truth for term dates and duration."
+                {provisioningReferenceRows
+                  ? `Copy the template below for provisioning. ${provisioningSourceLabel === "signed quote" ? "Quote Signed" : provisioningSourceLabel === "AR quote" ? "Auto-Renew" : "PO Received"} renewals use the ${provisioningSourceLabel} PDF as the source of truth for term dates, duration, and service provider.`
                   : "Copy the template below for provisioning. For PO-only or Auto-Renew renewals, values come from the unsigned / AR quote and Salesforce opportunity."}
               </p>
             </div>
@@ -863,11 +835,13 @@ function SignedQuoteReviewerInner() {
             <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4">
               <div>
                 <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wide">
-                  {isAutoRenewTemplate ? "AR quote (provisioning source)" : "Salesforce reference"}
+                  {provisioningReferenceRows
+                    ? `${provisioningSourceLabel.charAt(0).toUpperCase()}${provisioningSourceLabel.slice(1)} (provisioning source)`
+                    : "Salesforce reference"}
                 </h3>
                 <p className="text-xs text-gray-500 mt-1">
-                  {isAutoRenewTemplate
-                    ? "Values extracted from the unsigned AR quote PDF — these drive the provisioning template below."
+                  {provisioningReferenceRows
+                    ? `Values extracted from the ${provisioningSourceLabel} PDF — these drive the provisioning template below.`
                     : "Values pulled from the opportunity for the provisioning template. When you review the PDFs, confirm these match the signed quote — this is not an automated check yet."}
                 </p>
               </div>
@@ -876,10 +850,12 @@ function SignedQuoteReviewerInner() {
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
                       <th className="text-left font-semibold text-gray-600 px-4 py-2.5 w-[40%]">
-                        {isAutoRenewTemplate ? "Field" : "Opportunity field"}
+                        {provisioningReferenceRows ? "Field" : "Opportunity field"}
                       </th>
                       <th className="text-left font-semibold text-gray-600 px-4 py-2.5">
-                        {isAutoRenewTemplate ? "Value from AR quote" : "Value from Salesforce"}
+                        {provisioningReferenceRows
+                          ? `Value from ${provisioningSourceLabel}`
+                          : "Value from Salesforce"}
                       </th>
                     </tr>
                   </thead>

@@ -771,7 +771,15 @@ export function buildDocumentAnalysis(
   }
 
   const signedForAnalysis = signed
-    ? { ...signed, fields: sanitizeQuoteFields(signed.fields, unsigned?.fields ?? null, fieldHints) }
+    ? enrichQuoteDocument({
+      ...signed,
+      fields: sanitizeQuoteFields(
+        signed.fields,
+        unsigned?.fields ?? null,
+        fieldHints,
+        { documentOnlyTermFields: !usesUnsignedQuoteBaseline(mode) },
+      ),
+    })
     : null
 
   const unsignedForAnalysis = enrichQuoteDocument(unsigned)
