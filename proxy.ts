@@ -4,6 +4,7 @@ const PUBLIC_PATHS = [
   '/login',
   '/api/auth/salesforce',
   '/api/auth/callback/salesforce',
+  '/api/build-log',
   '/_next/',
   '/favicon.ico',
 ]
