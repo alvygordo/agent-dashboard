@@ -1,136 +1,103 @@
-# Build Log — Vercel Deployment Webhook (recommended)
+# Build Log — Vercel Deployment Webhook (other agents)
 
-**Replaces:** GitHub push triggers, Make.com, per-repo GitHub Actions.
+**Scope:** Contract Finder, Opp Prep AI, SF Agent, NS Agent — **not Dashboard**.
+
+**Dashboard** keeps its **existing working build log** (Make / current pipeline). Do not change it.
 
 **Triggers on:** `deployment.succeeded` for **production only** — a row is added only after Vercel finishes a successful prod deploy.
 
 ---
 
-## Why this approach
+## Split architecture
 
-| Approach | Problem |
-|----------|---------|
-| Make.com Router | Free tier limits; router unreliable for 6 agents |
-| GitHub push → API | Logs every push, not every deploy; Notion integration access pain per repo |
-| GitHub Actions on push | Fires before deploy completes |
-| **Vercel deployment webhook** | Native, prod-only, one endpoint, one Notion DB |
-
-Optional later: add AI summary inside the webhook handler using your existing TrueFoundry gateway (`OPENAI_BASE_URL`).
-
----
-
-## Architecture
+| Agent | Build log pipeline | Notion database |
+|-------|-------------------|-----------------|
+| **Dashboard** | **Existing (keep as-is)** | [Build Log — Dashboard](https://app.notion.com/p/38a85e927d3180c1bba5ccc08b96c257) |
+| Contract Finder | Vercel deploy webhook → `/api/vercel-deploy-webhook` | Build Log — All Agents (new) |
+| Opp Prep AI | Same | Same |
+| SF Agent | Same | Same |
+| NS Agent | Same | Same |
 
 ```
-Vercel prod deploy succeeds (any of 6 projects)
+Other agent prod deploy succeeds
         ↓
-deployment.succeeded webhook
+deployment.succeeded webhook (per agent Vercel project)
         ↓
 POST https://so-agent-dashboard.vercel.app/api/vercel-deploy-webhook
         ↓
-Verify x-vercel-signature (HMAC-SHA1)
+Verify signature → map project → Agent label
         ↓
-Map project name → Agent label
-        ↓
-One centralized Notion database (Agent + Commit + Date + Type + Deploy URL)
+Build Log — All Agents (Notion)
 ```
 
+Dashboard deploys are **ignored** by this webhook (`skipped: dashboard-uses-legacy-pipeline`).
+
 ---
 
-## Step 1 — Create centralized Notion database
+## Step 1 — Create Notion database **Build Log — All Agents**
 
-In Notion (under **SO Agent Dashboard — Playbook & Reference**):
+Under **SO Agent Dashboard — Playbook & Reference**:
 
-1. Create a new database: **Build Log — All Agents**
-2. Properties:
-
-| Property | Type | Notes |
-|----------|------|--------|
+| Property | Type | Options / notes |
+|----------|------|-----------------|
 | **Commit** | Title | Git commit message |
-| **Agent** | Select | Options: `Dashboard`, `Contract Finder`, `Opp Prep AI`, `SF Agent`, `NS Agent` |
+| **Agent** | Select | `Contract Finder`, `Opp Prep AI`, `SF Agent`, `NS Agent` |
 | **Date** | Date | Deploy date |
 | **Type** | Select | `feat`, `fix`, `chore`, `revert`, `debug`, `temp`, `Merge sandbox` |
-| **Deploy URL** | URL | Optional — Vercel deployment URL |
+| **Deploy URL** | URL | Vercel deployment URL |
 
-3. Open your Notion integration → **Content access** → add **Build Log — All Agents**
-4. Copy the **data source ID** from the database URL (or use Notion fetch — format `collection://…`)
+Grant your Notion integration **Content access** to this database only (Dashboard DB stays on its existing integration/access).
 
 ---
 
-## Step 2 — Vercel env vars (so-agent-dashboard only)
-
-On project **so-agent-dashboard** → Settings → Environment Variables:
+## Step 2 — Vercel env vars (so-agent-dashboard)
 
 | Variable | Value |
 |----------|--------|
-| `NOTION_TOKEN` | Your Notion internal integration secret |
-| `NOTION_DEPLOY_LOG_DATA_SOURCE_ID` | Data source ID for **Build Log — All Agents** |
-| `NOTION_DEPLOY_LOG_DATABASE_ID` | Page/database ID (classic API fallback) |
-| `VERCEL_DEPLOY_WEBHOOK_SECRET` | Create in Step 3 — same secret on all webhooks |
+| `NOTION_TOKEN` | Integration secret with access to **Build Log — All Agents** |
+| `NOTION_DEPLOY_LOG_DATA_SOURCE_ID` | Data source ID for the new database |
+| `NOTION_DEPLOY_LOG_DATABASE_ID` | Page ID fallback |
+| `VERCEL_DEPLOY_WEBHOOK_SECRET` | Shared secret from Step 3 |
 
 Redeploy **so-agent-dashboard** after adding.
 
 ---
 
-## Step 3 — Vercel deployment webhooks (each prod project)
+## Step 3 — Webhooks on **other agent** prod projects only
 
-For **each production Vercel project**, add a webhook:
+**Do not** add a deploy webhook on `so-agent-dashboard`.
 
-**Vercel** → project → **Settings** → **Webhooks** → **Create Webhook**
+For each **other** prod project → Settings → Webhooks:
 
 | Field | Value |
 |-------|--------|
 | **URL** | `https://so-agent-dashboard.vercel.app/api/vercel-deploy-webhook` |
-| **Events** | `deployment.succeeded` only |
-| **Secret** | Generate once — paste into `VERCEL_DEPLOY_WEBHOOK_SECRET` on dashboard |
+| **Events** | `deployment.succeeded` |
+| **Secret** | Same value as `VERCEL_DEPLOY_WEBHOOK_SECRET` |
 
-Repeat for:
-
-| Vercel project | Agent logged |
-|----------------|--------------|
-| `so-agent-dashboard` | Dashboard |
+| Vercel project | Logged as |
+|----------------|-----------|
 | `so-contract-finder` | Contract Finder |
 | `gpt-opp-prep` | Opp Prep AI |
 | `so-sf-agent` | SF Agent |
 | `ns-agent` | NS Agent |
 
-Use the **same webhook URL and same secret** for all five.
-
-> **Tip:** If your Vercel team supports a **team-level webhook** covering all projects, one webhook replaces five.
-
 ---
 
-## Step 4 — Turn off old pipelines
+## Step 4 — Clean up **other agents only**
 
-- **Make.com:** turn OFF the GitHub→Notion scenario
-- **GitHub webhooks** pointing at Make or `/api/build-log`: delete or disable
-- **ContractFinder** `.github/workflows/notion-build-log.yml`: optional to remove (deploy webhook replaces it)
+- **Keep** Dashboard Make / existing webhook pipeline running
+- Turn off CF/other Make routes if any
+- Remove ContractFinder `.github/workflows/notion-build-log.yml` when webhook is verified
 
 ---
 
 ## Step 5 — Test
 
-1. Push a small commit to `main` on any agent repo
-2. Wait for Vercel prod deploy to finish (green)
-3. Check **Build Log — All Agents** in Notion
-4. Or check Vercel → **so-agent-dashboard** → **Logs** for `vercel-deploy-webhook`
-
-Manual test (after deploy):
-
-```bash
-# Requires valid signature — easiest test is a real prod redeploy from Vercel UI
-```
-
----
-
-## Optional: AI summary (phase 2)
-
-Inside `app/api/vercel-deploy-webhook/route.ts`, after parsing the commit message:
-
-1. Call TrueFoundry / OpenAI with: “One-line summary of this deploy commit: …”
-2. Write to a **Summary** rich-text property on the Notion row
-
-No GitHub Actions needed — the webhook handler does it in one place.
+1. Push to `main` on **ContractFinder** (not agent-dashboard)
+2. Wait for prod deploy on Vercel
+3. New row in **Build Log — All Agents** with Agent = Contract Finder
+4. Confirm **Build Log — Dashboard** still updates via its existing pipeline
 
 ---
 
@@ -138,14 +105,7 @@ No GitHub Actions needed — the webhook handler does it in one place.
 
 | Symptom | Fix |
 |---------|-----|
-| `403 Invalid signature` | `VERCEL_DEPLOY_WEBHOOK_SECRET` must match the secret shown when the webhook was created |
-| `503 NOTION_TOKEN` | Add token on **so-agent-dashboard** Vercel project |
-| `500 object_not_found` | Grant integration **Content access** to the centralized database |
-| `skipped: unknown-project:foo` | Add mapping in `lib/deploy-log-config.ts` |
-| Row missing after deploy | Confirm webhook event is `deployment.succeeded` and deploy target is **production** |
-
----
-
-## Legacy per-agent databases
-
-Your existing 6 separate Build Log databases can stay as read-only history. New entries go to **Build Log — All Agents**. Use Notion filtered views grouped by **Agent** if you want the old per-agent feel.
+| Dashboard row in All Agents DB | Should not happen — webhook skips dashboard projects |
+| `403 Invalid signature` | Match `VERCEL_DEPLOY_WEBHOOK_SECRET` to webhook secret |
+| `500 object_not_found` | Content access for **All Agents** DB only |
+| CF row missing | Webhook on `so-contract-finder`, event `deployment.succeeded`, prod target |

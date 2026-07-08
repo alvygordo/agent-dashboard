@@ -50,7 +50,10 @@ export async function POST(req: NextRequest) {
 
   const agent = agentForVercelProject(projectName)
   if (!agent) {
-    return NextResponse.json({ ok: true, skipped: `unknown-project:${projectName}` })
+    const reason = projectName.includes('dashboard') || projectName === 'agent-dashboard'
+      ? 'dashboard-uses-legacy-pipeline'
+      : `unknown-project:${projectName}`
+    return NextResponse.json({ ok: true, skipped: reason })
   }
 
   if (agent.includes('(sandbox)')) {
