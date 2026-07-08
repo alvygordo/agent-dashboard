@@ -14,15 +14,15 @@ Both apps use `app/api/build-log/route.ts` + `lib/notion-build-log.ts`. Token li
 
 ## One-time setup (if not done)
 
-### 1. Vercel env var (both projects)
+### 1. Vercel env var (both projects) — **required before logs appear**
 
 Add to **so-agent-dashboard** and **so-contract-finder** on Vercel:
 
 | Variable | Value |
 |----------|--------|
-| `NOTION_TOKEN` | Same integration token used by SF Agent / Notion MCP |
+| `NOTION_TOKEN` | Same integration token as SF Agent GitHub secret `NOTION_TOKEN` |
 
-Redeploy both projects after adding.
+Redeploy both projects after adding. API returns `503 NOTION_TOKEN is not configured` until this is set (auth/proxy fix is already deployed).
 
 ### 2. Dashboard GitHub webhook
 
