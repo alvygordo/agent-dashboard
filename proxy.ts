@@ -5,6 +5,7 @@ const PUBLIC_PATHS = [
   '/api/auth/salesforce',
   '/api/auth/callback/salesforce',
   '/api/build-log',
+  '/api/vercel-deploy-webhook',
   '/_next/',
   '/favicon.ico',
 ]
